@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useRef, useState } from 'react';
 
 interface MediaUploadProps {
   postId: number;
@@ -43,7 +43,7 @@ const MediaUpload: React.FC<MediaUploadProps> = ({ postId, onUploadComplete }) =
     const files = Array.from(e.dataTransfer.files).filter(
       file => file.type.startsWith('image/') || file.type.startsWith('video/')
     );
-    
+
     if (files.length > 0) {
       setSelectedFiles(files);
       await uploadFiles(files);
@@ -55,7 +55,7 @@ const MediaUpload: React.FC<MediaUploadProps> = ({ postId, onUploadComplete }) =
       const files = Array.from(e.target.files).filter(
         file => file.type.startsWith('image/') || file.type.startsWith('video/')
       );
-      
+
       if (files.length > 0) {
         setSelectedFiles(files);
         await uploadFiles(files);
@@ -70,8 +70,10 @@ const MediaUpload: React.FC<MediaUploadProps> = ({ postId, onUploadComplete }) =
   const uploadFiles = async (filesToUpload: File[]) => {
     if (filesToUpload.length === 0) return;
 
+    console.log('Starting upload for files:', filesToUpload.map(f => ({ name: f.name, size: f.size, type: f.type })));
+
     setUploading(true);
-    
+
     // Initialize progress tracking
     const initialProgress: UploadProgress[] = filesToUpload.map(file => ({
       file,
@@ -83,9 +85,9 @@ const MediaUpload: React.FC<MediaUploadProps> = ({ postId, onUploadComplete }) =
     try {
       for (let i = 0; i < filesToUpload.length; i++) {
         const file = filesToUpload[i];
-        
+
         // Update status to uploading
-        setUploadProgress(prev => prev.map((p, idx) => 
+        setUploadProgress(prev => prev.map((p, idx) =>
           idx === i ? { ...p, status: 'uploading' as const, progress: 50 } : p
         ));
 
@@ -98,23 +100,33 @@ const MediaUpload: React.FC<MediaUploadProps> = ({ postId, onUploadComplete }) =
           method: 'POST',
           body: formData,
         });
-        
+
         if (!response.ok) {
-          setUploadProgress(prev => prev.map((p, idx) => 
+          setUploadProgress(prev => prev.map((p, idx) =>
             idx === i ? { ...p, status: 'error' as const, progress: 0 } : p
           ));
-          throw new Error(`Upload failed: ${response.statusText}`);
+
+          // Try to get detailed error message
+          let errorMessage = `Upload failed: ${response.statusText}`;
+          try {
+            const errorData = await response.json();
+            errorMessage = errorData.detail || errorMessage;
+          } catch {
+            // If we can't parse JSON, use the status text
+          }
+
+          throw new Error(errorMessage);
         }
-        
+
         // Mark as complete
-        setUploadProgress(prev => prev.map((p, idx) => 
+        setUploadProgress(prev => prev.map((p, idx) =>
           idx === i ? { ...p, status: 'complete' as const, progress: 100 } : p
         ));
-        
+
         // Refresh media list after each file and wait for it
         await onUploadComplete();
       }
-      
+
       // Clear after brief delay to show completion
       setTimeout(() => {
         setSelectedFiles([]);
@@ -123,7 +135,8 @@ const MediaUpload: React.FC<MediaUploadProps> = ({ postId, onUploadComplete }) =
       }, 800);
     } catch (error) {
       console.error('Upload failed:', error);
-      alert('Upload failed. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'Upload failed. Please try again.';
+      alert(errorMessage);
       setUploading(false);
     }
   };
@@ -197,10 +210,10 @@ const MediaUpload: React.FC<MediaUploadProps> = ({ postId, onUploadComplete }) =
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: progress ? '8px' : '0' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
                       <span style={{ fontSize: '24px' }}>
-                        {progress?.status === 'complete' ? '✅' : 
-                         progress?.status === 'uploading' ? '⏳' :
-                         progress?.status === 'error' ? '❌' :
-                         file.type.startsWith('image/') ? '🖼️' : '🎬'}
+                        {progress?.status === 'complete' ? '✅' :
+                          progress?.status === 'uploading' ? '⏳' :
+                            progress?.status === 'error' ? '❌' :
+                              file.type.startsWith('image/') ? '🖼️' : '🎬'}
                       </span>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: '14px', fontWeight: '500', color: '#374151' }}>
@@ -211,8 +224,8 @@ const MediaUpload: React.FC<MediaUploadProps> = ({ postId, onUploadComplete }) =
                           {progress && (
                             <span style={{ marginLeft: '8px', fontWeight: '500' }}>
                               {progress.status === 'complete' ? '✓ Complete' :
-                               progress.status === 'uploading' ? 'Uploading...' :
-                               progress.status === 'error' ? 'Failed' : 'Pending'}
+                                progress.status === 'uploading' ? 'Uploading...' :
+                                  progress.status === 'error' ? 'Failed' : 'Pending'}
                             </span>
                           )}
                         </div>
@@ -235,18 +248,18 @@ const MediaUpload: React.FC<MediaUploadProps> = ({ postId, onUploadComplete }) =
                     )}
                   </div>
                   {progress && (
-                    <div style={{ 
-                      width: '100%', 
-                      height: '6px', 
-                      backgroundColor: '#e5e7eb', 
+                    <div style={{
+                      width: '100%',
+                      height: '6px',
+                      backgroundColor: '#e5e7eb',
                       borderRadius: '3px',
                       overflow: 'hidden'
                     }}>
                       <div style={{
                         width: `${progress.progress}%`,
                         height: '100%',
-                        backgroundColor: progress.status === 'complete' ? '#10b981' : 
-                                       progress.status === 'error' ? '#ef4444' : '#667eea',
+                        backgroundColor: progress.status === 'complete' ? '#10b981' :
+                          progress.status === 'error' ? '#ef4444' : '#667eea',
                         transition: 'width 0.3s ease'
                       }} />
                     </div>

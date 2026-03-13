@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { usePost } from '../hooks/useApi';
-import { postService, mediaService } from '../services/api';
-import MediaUpload from './MediaUpload';
+import { mediaService, postService } from '../services/api';
+import type { MediaFile } from '../types/post';
+import FileDetection from './FileDetection';
 import MediaGallery from './MediaGallery';
+import MediaUpload from './MediaUpload';
 
 interface PostDetailModalProps {
   postId: number;
@@ -16,7 +18,9 @@ const PostDetailModal: React.FC<PostDetailModalProps> = ({ postId, onClose, onUp
   const [caption, setCaption] = useState('');
   const [isEditingCaption, setIsEditingCaption] = useState(false);
   const [currentStage, setCurrentStage] = useState<'draft' | 'framed' | 'detailed' | 'done'>('draft');
+  const [selectedMediaStage, setSelectedMediaStage] = useState<'original' | 'framed' | 'detailed'>('original');
   const [saving, setSaving] = useState(false);
+  const captionTextareaRef = React.useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (post) {
@@ -41,9 +45,38 @@ const PostDetailModal: React.FC<PostDetailModalProps> = ({ postId, onClose, onUp
     }
   };
 
+  const handleCaptionBlur = async () => {
+    // Only save if the caption has actually changed
+    if (post && caption.trim() !== (post.caption || '').trim()) {
+      await handleSaveCaption();
+    } else {
+      setIsEditingCaption(false);
+    }
+  };
+
+  const handleCaptionKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Escape') {
+      setIsEditingCaption(false);
+      if (post) {
+        setCaption(post.caption || '');
+      }
+    } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      // Save on Ctrl+Enter or Cmd+Enter
+      e.preventDefault();
+      handleSaveCaption();
+    }
+  };
+
+  const handleCaptionClick = (e: React.FocusEvent<HTMLTextAreaElement>) => {
+    // Set cursor to end of text
+    const textarea = e.target;
+    const length = textarea.value.length;
+    textarea.setSelectionRange(length, length);
+  };
+
   const handleStageChange = async (newStage: string) => {
     if (currentStage === newStage) return;
-    
+
     setSaving(true);
     try {
       await postService.updatePost(postId, { stage: newStage });
@@ -73,7 +106,7 @@ const PostDetailModal: React.FC<PostDetailModalProps> = ({ postId, onClose, onUp
     if (!window.confirm('Are you sure you want to delete this media file?')) {
       return;
     }
-    
+
     setSaving(true);
     try {
       await mediaService.deleteMedia(mediaIdToDelete);
@@ -89,7 +122,7 @@ const PostDetailModal: React.FC<PostDetailModalProps> = ({ postId, onClose, onUp
 
   const handleDeletePost = async () => {
     if (!confirm('Delete this entire post and all its media? This cannot be undone.')) return;
-    
+
     try {
       await postService.deletePost(postId);
       onDelete();
@@ -109,8 +142,8 @@ const PostDetailModal: React.FC<PostDetailModalProps> = ({ postId, onClose, onUp
 
   return (
     <div className="modal" onClick={onClose}>
-      <div 
-        className="modal-content" 
+      <div
+        className="modal-content"
         onClick={(e) => e.stopPropagation()}
         style={{ maxWidth: '900px', width: '90%', maxHeight: '90vh', overflow: 'auto' }}
       >
@@ -121,138 +154,213 @@ const PostDetailModal: React.FC<PostDetailModalProps> = ({ postId, onClose, onUp
           </div>
         ) : (
           <>
-        {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', paddingBottom: '16px', borderBottom: '2px solid #e5e7eb' }}>
-          <h2 style={{ fontSize: '24px', fontWeight: 'bold', color: '#1f2937', margin: 0 }}>
-            Post #{post.id}
-          </h2>
-          <button
-            onClick={onClose}
-            style={{
-              background: 'none',
-              border: 'none',
-              fontSize: '28px',
-              cursor: 'pointer',
-              color: '#6b7280',
-              padding: '0',
-              lineHeight: '1'
-            }}
-          >
-            ×
-          </button>
-        </div>
-
-        {/* Caption Section */}
-        <div style={{ marginBottom: '24px' }}>
-          <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '8px', color: '#374151' }}>
-            Caption
-          </label>
-          {isEditingCaption ? (
-            <div>
-              <textarea
-                value={caption}
-                onChange={(e) => setCaption(e.target.value)}
-                rows={3}
-                className="form-input"
-                style={{ marginBottom: '8px' }}
-                autoFocus
-              />
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button onClick={handleSaveCaption} disabled={saving} className="button" style={{ fontSize: '14px' }}>
-                  {saving ? 'Saving...' : 'Save'}
-                </button>
-                <button onClick={() => { setCaption(post.caption || ''); setIsEditingCaption(false); }} className="button button-secondary" style={{ fontSize: '14px' }}>
-                  Cancel
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div 
-              onClick={() => setIsEditingCaption(true)}
-              style={{
-                padding: '12px',
-                backgroundColor: '#f9fafb',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                minHeight: '60px',
-                border: '1px solid #e5e7eb'
-              }}
-            >
-              <p style={{ color: caption ? '#374151' : '#9ca3af', fontSize: '14px', margin: 0 }}>
-                {caption || 'Click to add caption...'}
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* Stage Section */}
-        <div style={{ marginBottom: '24px' }}>
-          <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '8px', color: '#374151' }}>
-            Post Stage
-          </label>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
-            {stages.map((s) => (
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', paddingBottom: '16px', borderBottom: '2px solid #e5e7eb' }}>
+              <h2 style={{ fontSize: '24px', fontWeight: 'bold', color: '#1f2937', margin: 0 }}>
+                Post #{post.id}
+              </h2>
               <button
-                key={s.value}
-                onClick={() => handleStageChange(s.value)}
-                disabled={saving}
+                onClick={onClose}
                 style={{
-                  padding: '12px',
-                  borderRadius: '6px',
-                  border: currentStage === s.value ? `2px solid ${s.textColor}` : '2px solid #e5e7eb',
-                  backgroundColor: currentStage === s.value ? s.color : 'white',
-                  color: s.textColor,
-                  cursor: saving ? 'not-allowed' : 'pointer',
-                  fontWeight: '500',
-                  fontSize: '14px',
-                  transition: 'all 0.2s'
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '28px',
+                  cursor: 'pointer',
+                  color: '#6b7280',
+                  padding: '0',
+                  lineHeight: '1'
                 }}
               >
-                {s.label}
+                ×
               </button>
-            ))}
-          </div>
-        </div>
+            </div>
 
-        {/* Media Section */}
-        <div style={{ marginBottom: '24px' }}>
-          <MediaGallery
-            mediaFiles={post.media_files || []}
-            onPromote={handlePromoteMedia}
-            onDelete={handleDeleteMedia}
-          />
-        </div>
+            {/* Caption Section */}
+            <div style={{ marginBottom: '24px' }}>
+              <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '8px', color: '#374151' }}>
+                Caption
+              </label>
+              {isEditingCaption ? (
+                <div>
+                  <textarea
+                    ref={captionTextareaRef}
+                    value={caption}
+                    onChange={(e) => setCaption(e.target.value)}
+                    onFocus={handleCaptionClick}
+                    onBlur={handleCaptionBlur}
+                    onKeyDown={handleCaptionKeyDown}
+                    rows={3}
+                    className="form-input"
+                    style={{ marginBottom: '8px' }}
+                    autoFocus
+                    placeholder="Enter caption... (auto-saves when you click away)"
+                  />
+                  {saving && (
+                    <div style={{ fontSize: '12px', color: '#6b7280', fontStyle: 'italic' }}>
+                      Saving...
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div
+                  onClick={() => setIsEditingCaption(true)}
+                  style={{
+                    padding: '12px',
+                    backgroundColor: '#f9fafb',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    minHeight: '60px',
+                    border: '1px solid #e5e7eb'
+                  }}
+                >
+                  <p style={{ color: caption ? '#374151' : '#9ca3af', fontSize: '14px', margin: 0 }}>
+                    {caption || 'Click to add caption...'}
+                  </p>
+                </div>
+              )}
+            </div>
 
-        {/* Upload Section */}
-        <div style={{ marginBottom: '24px', paddingTop: '24px', borderTop: '2px solid #e5e7eb' }}>
-          <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '12px', color: '#1f2937' }}>
-            Upload New Media
-          </h3>
-          <MediaUpload
-            postId={postId}
-            onUploadComplete={async () => {
-              await refetch();
-            }}
-          />
-        </div>
+            {/* Stage Section */}
+            <div style={{ marginBottom: '24px' }}>
+              <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '8px', color: '#374151' }}>
+                Post Stage
+              </label>
+              <select
+                value={currentStage}
+                onChange={(e) => handleStageChange(e.target.value)}
+                disabled={saving}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  borderRadius: '6px',
+                  border: '1px solid #e5e7eb',
+                  backgroundColor: 'white',
+                  fontSize: '14px',
+                  color: '#374151',
+                  cursor: saving ? 'not-allowed' : 'pointer'
+                }}
+              >
+                {stages.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-        {/* Footer Actions */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '24px', borderTop: '2px solid #e5e7eb' }}>
-          <button
-            onClick={handleDeletePost}
-            className="button"
-            style={{ backgroundColor: '#dc2626', color: 'white' }}
-          >
-            🗑️ Delete Post
-          </button>
-          <button
-            onClick={onClose}
-            className="button"
-          >
-            Close
-          </button>
-        </div>
-        </>
+            {/* Media Section */}
+            <div style={{ marginBottom: '24px' }}>
+              {/* Media Stage Navigation */}
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '8px', color: '#374151' }}>
+                  Media Stage View
+                </label>
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                  {[
+                    { value: 'original', label: 'Original' },
+                    { value: 'framed', label: 'Framed' },
+                    { value: 'detailed', label: 'Detailed' }
+                  ].map((stage) => {
+                    const count = (post.media_files || []).filter((media: MediaFile) => {
+                      switch (stage.value) {
+                        case 'original':
+                          return !!media.original_path;
+                        case 'framed':
+                          return !!media.framed_path;
+                        case 'detailed':
+                          return !!media.detailed_path;
+                        default:
+                          return false;
+                      }
+                    }).length;
+
+                    return (
+                      <button
+                        key={stage.value}
+                        onClick={() => setSelectedMediaStage(stage.value as 'original' | 'framed' | 'detailed')}
+                        style={{
+                          padding: '8px 16px',
+                          borderRadius: '6px',
+                          border: selectedMediaStage === stage.value ? '2px solid #3b82f6' : '1px solid #e5e7eb',
+                          backgroundColor: selectedMediaStage === stage.value ? '#dbeafe' : 'white',
+                          color: selectedMediaStage === stage.value ? '#1d4ed8' : '#374151',
+                          cursor: 'pointer',
+                          fontSize: '14px',
+                          fontWeight: '500',
+                          position: 'relative'
+                        }}
+                      >
+                        {stage.label}
+                        {count > 0 && (
+                          <span style={{
+                            marginLeft: '6px',
+                            backgroundColor: selectedMediaStage === stage.value ? '#1d4ed8' : '#6b7280',
+                            color: 'white',
+                            fontSize: '12px',
+                            padding: '2px 6px',
+                            borderRadius: '10px',
+                            fontWeight: '600'
+                          }}>
+                            {count}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div style={{ fontSize: '12px', color: '#6b7280' }}>
+                  Filter and manage media at different stages independently
+                </div>
+              </div>
+
+              <MediaGallery
+                key={`${post?.updated_at}-${selectedMediaStage}`} // Force re-render when stage changes
+                mediaFiles={post.media_files || []}
+                onPromote={handlePromoteMedia}
+                onDelete={handleDeleteMedia}
+                selectedMediaStage={selectedMediaStage}
+              />
+            </div>
+
+            {/* File Detection Section */}
+            <FileDetection
+              postId={postId}
+              onFilesProcessed={async () => {
+                await refetch();
+                onUpdate();
+              }}
+            />
+
+            {/* Upload Section */}
+            <div style={{ marginBottom: '24px', paddingTop: '24px', borderTop: '2px solid #e5e7eb' }}>
+              <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '12px', color: '#1f2937' }}>
+                Upload New Media
+              </h3>
+              <MediaUpload
+                postId={postId}
+                onUploadComplete={async () => {
+                  await refetch();
+                }}
+              />
+            </div>
+
+            {/* Footer Actions */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '24px', borderTop: '2px solid #e5e7eb' }}>
+              <button
+                onClick={handleDeletePost}
+                className="button"
+                style={{ backgroundColor: '#dc2626', color: 'white' }}
+              >
+                🗑️ Delete Post
+              </button>
+              <button
+                onClick={onClose}
+                className="button"
+              >
+                Close
+              </button>
+            </div>
+          </>
         )}
       </div>
     </div>

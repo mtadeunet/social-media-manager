@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { postService } from '../services/api';
 import { Post, PostList } from '../types/post';
 
@@ -70,9 +70,17 @@ export const usePosts = (stage?: string) => {
     createPost,
     updatePost,
     deletePost,
-    refetch: () => {
+    refetch: async () => {
       setLoading(true);
       setError(null);
+      try {
+        const data = await postService.getPosts(stage);
+        setPosts(data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to fetch posts');
+      } finally {
+        setLoading(false);
+      }
     }
   };
 };

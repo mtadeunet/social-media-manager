@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
-import { usePosts } from '../hooks/useApi';
-import PostList from '../components/PostList';
 import PostDetailModal from '../components/PostDetailModal';
+import PostList from '../components/PostList';
+import { usePosts } from '../hooks/useApi';
 
 const PostsPage: React.FC = () => {
   const [selectedPostId, setSelectedPostId] = useState<number | null>(null);
   const [selectedStage, setSelectedStage] = useState<string>('');
   const [creating, setCreating] = useState(false);
-  const { posts, loading, error, createPost, deletePost } = usePosts();
+  const { posts: apiPosts, loading: apiLoading, error, createPost, deletePost, refetch: refetchPosts } = usePosts();
 
   const handlePostClick = (postId: number) => {
     setSelectedPostId(postId);
@@ -57,19 +57,19 @@ const PostsPage: React.FC = () => {
   return (
     <div className="container">
       {/* Header Section */}
-      <div style={{ 
-        background: 'white', 
-        borderRadius: '16px', 
-        padding: '32px', 
+      <div style={{
+        background: 'white',
+        borderRadius: '16px',
+        padding: '32px',
         marginBottom: '32px',
         boxShadow: '0 4px 6px rgba(0, 0, 0, 0.07), 0 10px 20px rgba(0, 0, 0, 0.05)'
       }}>
         <div className="flex justify-between items-center" style={{ marginBottom: '24px' }}>
           <div>
-            <h1 style={{ 
-              fontSize: '36px', 
-              fontWeight: 'bold', 
-              margin: 0, 
+            <h1 style={{
+              fontSize: '36px',
+              fontWeight: 'bold',
+              margin: 0,
               background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
@@ -125,9 +125,9 @@ const PostsPage: React.FC = () => {
         <PostDetailModal
           postId={selectedPostId}
           onClose={() => setSelectedPostId(null)}
-          onUpdate={() => {
-            // Refetch posts to update the list
-            window.location.reload();
+          onUpdate={async () => {
+            // Refetch posts to update the list without closing modal
+            await refetchPosts();
           }}
           onDelete={() => {
             setSelectedPostId(null);
@@ -138,8 +138,8 @@ const PostsPage: React.FC = () => {
 
       {/* Posts List */}
       <PostList
-        posts={posts.filter(post => !selectedStage || post.stage === selectedStage)}
-        loading={loading}
+        posts={apiPosts.filter(post => !selectedStage || post.stage === selectedStage)}
+        loading={apiLoading}
         onPostClick={handlePostClick}
         onDeletePost={handleDeletePost}
       />

@@ -94,25 +94,51 @@ async def create_thumbnail(image_path: Path, thumbnail_path: Path) -> None:
             
             # Save thumbnail
             img.save(thumbnail_path, 'JPEG', quality=85, optimize=True)
-    except ImportError:
-        # Fallback to copying if PIL not available
-        if image_path.exists():
-            thumbnail_path.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(image_path, thumbnail_path)
+    except ImportError as e:
+        # Let it fail loudly if PIL is not available - no silent fallbacks
+        raise HTTPException(status_code=500, detail=f"PIL (Pillow) is not installed or not accessible: {str(e)}. Please install Pillow to create thumbnails.")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to create thumbnail: {str(e)}")
 
 async def create_video_thumbnail(video_path: Path, thumbnail_path: Path) -> None:
-    """Create placeholder thumbnail for video"""
+    """Create thumbnail for video by extracting a frame using ffmpeg"""
     try:
-        # For now, just create a placeholder
-        # In production, would use ffmpeg to extract a frame
         if video_path.exists():
             thumbnail_path.parent.mkdir(parents=True, exist_ok=True)
-            # Copy first few KB as placeholder
-            with open(video_path, 'rb') as src:
-                with open(thumbnail_path, 'wb') as dst:
-                    dst.write(src.read(1024))  # Just 1KB placeholder
+            
+            # Always save thumbnail as JPEG with .jpg extension
+            jpeg_thumbnail_path = thumbnail_path.with_suffix('.jpg')
+            
+            # Use ffmpeg to extract a thumbnail from the video
+            # Extract frame at 1 second (or 00:00:01 if video is shorter)
+            import subprocess
+            
+            cmd = [
+                'ffmpeg',
+                '-i', str(video_path),
+                '-ss', '00:00:01',  # Seek to 1 second
+                '-vframes', '1',     # Extract only 1 frame
+                '-vf', 'scale=256:256:force_original_aspect_ratio=decrease',  # Scale to fit in 256x256
+                '-y',                # Overwrite output file
+                str(jpeg_thumbnail_path)
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            
+            if result.returncode != 0:
+                # If ffmpeg fails, fall back to placeholder
+                with open(video_path, 'rb') as src:
+                    with open(thumbnail_path, 'wb') as dst:
+                        dst.write(src.read(1024))  # Just 1KB placeholder
+                print(f"Warning: ffmpeg failed for {video_path}, using placeholder. Error: {result.stderr}")
+            else:
+                # If successful, ensure the thumbnail has the correct .jpg extension
+                if jpeg_thumbnail_path != thumbnail_path:
+                    import shutil
+                    shutil.copy2(jpeg_thumbnail_path, thumbnail_path)
+                    # Clean up the temporary JPEG file
+                    jpeg_thumbnail_path.unlink()
+            
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to create video thumbnail: {str(e)}")
 
@@ -132,5 +158,8 @@ def move_post_directory(post_id: int, source_is_posted: bool, target_is_posted: 
     target_dir = get_media_directory(post_id, target_is_posted, posted_date)
     
     if source_dir.exists():
-        target_dir.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(source_dir), str(target_dir))
+        try:
+            target_dir.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(source_dir), str(target_dir))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to move post directory from {source_dir} to {target_dir}: {str(e)}")

@@ -100,8 +100,8 @@ def delete_post(post_id: int, db: Session = Depends(get_db)):
         if post_dir.exists():
             shutil.rmtree(post_dir)
     except Exception as e:
-        print(f"Error deleting post directory: {e}")
-        # Continue anyway to delete from database
+        # Don't silently fail - this could leave orphaned files
+        raise HTTPException(status_code=500, detail=f"Failed to delete post directory {post_dir}: {str(e)}")
     
     db.delete(post)
     db.commit()

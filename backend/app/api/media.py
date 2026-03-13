@@ -80,8 +80,12 @@ async def upload_to_stage(
     thumbnail_path = get_thumbnail_path(file_path)
     if file_type == "image":
         await create_thumbnail(file_path, thumbnail_path)
+        actual_thumbnail_path = thumbnail_path
     else:
-        await create_video_thumbnail(file_path, thumbnail_path)
+        # For videos, always use .jpg extension for thumbnails
+        video_thumbnail_path = thumbnail_path.with_suffix('.jpg')
+        await create_video_thumbnail(file_path, video_thumbnail_path)
+        actual_thumbnail_path = video_thumbnail_path
     
     # Update database
     if action == "original":
@@ -91,7 +95,7 @@ async def upload_to_stage(
             base_filename=base_filename,
             file_extension=file_extension,
             original_path=str(file_path),
-            original_thumbnail_path=str(thumbnail_path),
+            original_thumbnail_path=str(actual_thumbnail_path),
             file_type=file_type
         )
         db.add(media)
@@ -104,10 +108,10 @@ async def upload_to_stage(
             
             if stage == "framed":
                 media.framed_path = str(file_path)
-                media.framed_thumbnail_path = str(thumbnail_path)
+                media.framed_thumbnail_path = str(actual_thumbnail_path)
             elif stage == "detailed":
                 media.detailed_path = str(file_path)
-                media.detailed_thumbnail_path = str(thumbnail_path)
+                media.detailed_thumbnail_path = str(actual_thumbnail_path)
         else:
             # Create new media file for staged content
             media = MediaFile(
@@ -115,15 +119,18 @@ async def upload_to_stage(
                 base_filename=base_filename,
                 file_extension=file_extension,
                 original_path="",  # No original file
-                thumbnail_path="",
+                original_thumbnail_path="",  # No original thumbnail
                 file_type=file_type
             )
             if stage == "framed":
                 media.framed_path = str(file_path)
-                media.framed_thumbnail_path = str(thumbnail_path)
+                media.framed_thumbnail_path = str(actual_thumbnail_path)
             elif stage == "detailed":
                 media.detailed_path = str(file_path)
-                media.detailed_thumbnail_path = str(thumbnail_path)
+                media.detailed_thumbnail_path = str(actual_thumbnail_path)
+            elif stage == "original":
+                media.original_path = str(file_path)
+                media.original_thumbnail_path = str(actual_thumbnail_path)
             db.add(media)
     
     db.commit()
@@ -169,7 +176,7 @@ def validate_upload(
     )
 
 @router.post("/media/{media_id}/promote")
-def promote_media(
+async def promote_media(
     media_id: int,
     target_stage: str = Form(...),
     db: Session = Depends(get_db)
@@ -198,22 +205,28 @@ def promote_media(
     
     # Copy file to new stage
     if source_path and os.path.exists(source_path):
-        import shutil
-        shutil.copy2(source_path, target_path)
-        
-        # Create thumbnail for new stage
-        thumbnail_path = get_thumbnail_path(target_path)
-        if media.file_type == "image":
-            import asyncio
-            asyncio.create_task(create_thumbnail(target_path, thumbnail_path))
-        else:
-            import asyncio
-            asyncio.create_task(create_video_thumbnail(target_path, thumbnail_path))
+        try:
+            import shutil
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source_path, target_path)
+            
+            # Create thumbnail for new stage
+            thumbnail_path = get_thumbnail_path(target_path)
+            if media.file_type == "image":
+                await create_thumbnail(target_path, thumbnail_path)
+                actual_thumbnail_path = thumbnail_path
+            else:
+                # For videos, always use .jpg extension for thumbnails
+                video_thumbnail_path = thumbnail_path.with_suffix('.jpg')
+                await create_video_thumbnail(target_path, video_thumbnail_path)
+                actual_thumbnail_path = video_thumbnail_path
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to copy file from {source_path} to {target_path}: {str(e)}")
         
         if target_stage == "framed":
-            media.framed_thumbnail_path = str(thumbnail_path)
+            media.framed_thumbnail_path = str(actual_thumbnail_path)
         elif target_stage == "detailed":
-            media.detailed_thumbnail_path = str(thumbnail_path)
+            media.detailed_thumbnail_path = str(actual_thumbnail_path)
     
     db.commit()
     

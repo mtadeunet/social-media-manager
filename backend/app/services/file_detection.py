@@ -112,7 +112,9 @@ def detect_and_classify_files(db: Session, post_id: int) -> List[Dict]:
     if not post:
         raise ValueError(f"Post {post_id} not found")
     
-    post_directory = Path(post.media_root)
+    # Construct the media directory path based on post ID
+    # Assuming the structure is: media/drafts/post_{id}/
+    post_directory = Path(f"media/drafts/post_{post_id}")
     print(f"Scanning directory: {post_directory}")
     
     # Detect all files with timeout protection
