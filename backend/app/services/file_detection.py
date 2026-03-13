@@ -320,44 +320,57 @@ def process_detected_files(db: Session, post_id: int, detection_result: Dict) ->
                 summary['processed_files'].append(f"Regenerated thumbnail: {base_name} ({thumbnail_path})")
                 
             elif action == 'review':
-                # For review action (duplicates), create media record and generate thumbnail
-                if classification['extension'].lower() in ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp']:
-                    # Use the full filename (without extension) as base name for duplicates
-                    duplicate_base_name = file_path.stem
+                # Handle different types of review actions
+                classification_type = classification.get('classification', '')
+                
+                if classification_type == 'duplicate_stage':
+                    # For duplicate_stage, this means the stage already exists - do nothing
+                    base_name = classification['base_name']
+                    stage = classification['stage']
+                    summary['processed_files'].append(
+                        f"Stage already exists: {base_name}_{stage} (no action needed)"
+                    )
                     
-                    # Check if media record already exists for this exact file
-                    existing_media_for_file = None
-                    for existing_base, existing_media_record in existing_media.items():
-                        if (existing_media_record.original_path == str(file_path) or
-                            existing_base == duplicate_base_name):
-                            existing_media_for_file = existing_media_record
-                            break
-                    
-                    if existing_media_for_file:
-                        # Update existing record or generate thumbnail if needed
-                        if not existing_media_for_file.original_thumbnail_path or not Path(existing_media_for_file.original_thumbnail_path).exists():
-                            existing_media_for_file.original_thumbnail_path = _generate_thumbnail(file_path)
-                            summary['processed_files'].append(
-                                f"Updated thumbnail for existing duplicate: {duplicate_base_name}"
-                            )
+                elif classification_type == 'duplicate_original':
+                    # For duplicate_original, create media record and generate thumbnail
+                    if classification['extension'].lower() in ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp']:
+                        # Use the full filename (without extension) as base name for duplicates
+                        duplicate_base_name = file_path.stem
+                        
+                        # Check if media record already exists for this exact file
+                        existing_media_for_file = None
+                        for existing_base, existing_media_record in existing_media.items():
+                            if (existing_media_record.original_path == str(file_path) or
+                                existing_base == duplicate_base_name):
+                                existing_media_for_file = existing_media_record
+                                break
+                        
+                        if existing_media_for_file:
+                            # Update existing record or generate thumbnail if needed
+                            if not existing_media_for_file.original_thumbnail_path or not Path(existing_media_for_file.original_thumbnail_path).exists():
+                                existing_media_for_file.original_thumbnail_path = _generate_thumbnail(file_path)
+                                summary['processed_files'].append(
+                                    f"Updated thumbnail for existing duplicate: {duplicate_base_name}"
+                                )
+                            else:
+                                summary['processed_files'].append(
+                                    f"Duplicate already exists: {duplicate_base_name}"
+                                )
                         else:
-                            summary['processed_files'].append(
-                                f"Duplicate already exists: {duplicate_base_name}"
+                            # Create new media record for duplicate file
+                            media = MediaFile(
+                                post_id=post_id,
+                                base_filename=duplicate_base_name,
+                                file_extension=classification['extension'],
+                                file_type=_detect_file_type(classification['extension'])
                             )
-                    else:
-                        # Create new media record for duplicate file
-                        media = MediaFile(
-                            post_id=post_id,
-                            base_filename=duplicate_base_name,
-                            file_extension=classification['extension'],
-                            file_type=_detect_file_type(classification['extension'])
-                        )
-                        media.original_path = str(file_path)
-                        media.original_thumbnail_path = _generate_thumbnail(file_path)
-                        db.add(media)
-                        summary['processed_files'].append(
-                            f"Created media record for duplicate: {duplicate_base_name} ({str(file_path)})"
-                        )
+                            media.original_path = str(file_path)
+                            media.original_thumbnail_path = _generate_thumbnail(file_path)
+                            db.add(media)
+                            summary['processed_files'].append(
+                                f"Created media record for duplicate: {duplicate_base_name} ({str(file_path)})"
+                            )
+                    
                     summary['duplicates'] += 1
                     
             elif action == 'mark_invalid':

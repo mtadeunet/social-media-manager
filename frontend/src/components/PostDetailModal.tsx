@@ -76,16 +76,12 @@ const PostDetailModal: React.FC<PostDetailModalProps> = ({ postId, onClose, onUp
   const handleImportInvalidFile = async (filename: string, targetStage: string) => {
     try {
       // Extract base name from filename (remove extension and invalid suffix)
-      const baseName = filename.replace(/\.[^/.]+$/, "").replace(/_v\d+.*$/, '');
-
-      // Create new filename with correct stage suffix
-      const newFilename = targetStage === 'original'
-        ? `${baseName}.jpg`
-        : `${baseName}_${targetStage}.jpg`;
+      const baseName = filename.replace(/_v\d+|_copy|_final|_edit|_draft/g, '').replace(/\.[^/.]+$/, '');
+      const extension = filename.split('.').pop();
+      const newFilename = `${baseName}_${targetStage}.${extension}`;
 
       console.log(`Importing ${filename} to ${targetStage} as ${newFilename}`);
 
-      // Call backend API to rename and process the file
       const response = await fetch(`http://localhost:8000/api/file-detection/posts/${postId}/import-invalid`, {
         method: 'POST',
         headers: {
@@ -94,7 +90,7 @@ const PostDetailModal: React.FC<PostDetailModalProps> = ({ postId, onClose, onUp
         body: JSON.stringify({
           original_filename: filename,
           new_filename: newFilename,
-          target_stage: targetStage
+          target_stage: targetStage,
         }),
       });
 
@@ -102,10 +98,13 @@ const PostDetailModal: React.FC<PostDetailModalProps> = ({ postId, onClose, onUp
         throw new Error('Failed to import file');
       }
 
-      // Refresh data
-      await fetchInvalidFiles();
-      await refetch();
-      onUpdate();
+      // Wait a moment for backend processing to complete
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Refresh data in correct order
+      await refetch();  // Refresh post data first
+      await fetchInvalidFiles();  // Then refresh invalid files
+      onUpdate();  // Notify parent component
 
       console.log(`Successfully imported ${filename} as ${newFilename}`);
     } catch (error) {

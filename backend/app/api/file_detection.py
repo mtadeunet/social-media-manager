@@ -313,6 +313,35 @@ async def clear_stage_path(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error clearing stage path: {str(e)}")
 
+@router.delete("/posts/{post_id}/media/{media_id}")
+async def delete_media_record(
+    post_id: int,
+    media_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Delete a specific media record (for cleanup purposes).
+    """
+    try:
+        from app.models.media import MediaFile
+        media = db.query(MediaFile).filter(MediaFile.id == media_id, MediaFile.post_id == post_id).first()
+        
+        if not media:
+            raise HTTPException(status_code=404, detail="Media file not found")
+        
+        db.delete(media)
+        db.commit()
+        
+        return {
+            'success': True,
+            'message': f"Deleted media record {media_id}"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error deleting media record: {str(e)}")
+
 @router.post("/posts/{post_id}/import-invalid")
 async def import_invalid_file(
     post_id: int,
