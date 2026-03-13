@@ -107,7 +107,7 @@ def classify_file(file_path: Path, existing_media: Dict[str, MediaFile]) -> Dict
             classification['classification'] = 'new_original'
             classification['action'] = 'create_new'
     elif stage in VALID_STAGES:
-        # Valid stage suffix
+        # Valid stage suffix (framed, detailed) - this is a promoted file
         if base_name in existing_media:
             existing = existing_media[base_name]
             classification['existing_media'] = existing
@@ -124,9 +124,15 @@ def classify_file(file_path: Path, existing_media: Dict[str, MediaFile]) -> Dict
             classification['classification'] = 'orphan_stage'
             classification['action'] = 'create_new_with_stage'
     else:
-        # Invalid stage suffix
-        classification['classification'] = 'duplicate_original'
-        classification['action'] = 'review'
+        # Invalid stage suffix (v1, v2, copy, etc.) - this is an invalid stage file
+        if base_name in existing_media:
+            classification['classification'] = 'invalid_stage'
+            classification['action'] = 'mark_invalid'
+            classification['existing_media'] = existing_media[base_name]
+        else:
+            # No base file exists, treat as new original with invalid naming
+            classification['classification'] = 'new_original'
+            classification['action'] = 'create_new'
     
     return classification
 
@@ -256,6 +262,7 @@ def process_detected_files(db: Session, post_id: int, detection_result: Dict) ->
         'new_original': 0,
         'new_stage': 0,
         'duplicates': 0,
+        'invalid_stage': 0,
         'invalid': 0,
         'deleted': 0,
         'updated': 0,
@@ -290,9 +297,9 @@ def process_detected_files(db: Session, post_id: int, detection_result: Dict) ->
                 summary['updated'] += 1
                 summary['processed_files'].append(f"Regenerated thumbnail: {base_name} ({thumbnail_path})")
                 
-            elif action in ['review', 'mark_invalid']:
+            elif action == 'review':
                 # For review action (duplicates), create media record and generate thumbnail
-                if action == 'review' and classification['extension'].lower() in ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp']:
+                if classification['extension'].lower() in ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp']:
                     # Use the full filename (without extension) as base name for duplicates
                     duplicate_base_name = file_path.stem
                     
@@ -329,12 +336,20 @@ def process_detected_files(db: Session, post_id: int, detection_result: Dict) ->
                         summary['processed_files'].append(
                             f"Created media record for duplicate: {duplicate_base_name} ({str(file_path)})"
                         )
-                else:
-                    # For invalid files or non-image duplicates, just count them
-                    summary['duplicates' if action == 'review' else 'invalid'] += 1
+                    summary['duplicates'] += 1
+                    
+            elif action == 'mark_invalid':
+                # For invalid stage files, generate thumbnail but flag for user review
+                if classification['extension'].lower() in ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp']:
+                    thumbnail_path = _generate_thumbnail(file_path)
                     summary['processed_files'].append(
-                        f"Flagged for {action}: {base_name} ({classification['classification']})"
+                        f"Generated thumbnail for invalid stage: {base_name} ({classification['stage']}) - {thumbnail_path}"
                     )
+                else:
+                    summary['processed_files'].append(
+                        f"Flagged invalid stage file: {base_name} ({classification['stage']})"
+                    )
+                summary['invalid_stage'] = 1
                 
         except Exception as e:
             summary['processed_files'].append(f"Error processing {base_name}: {str(e)}")

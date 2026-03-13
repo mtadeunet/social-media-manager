@@ -53,6 +53,44 @@ A comprehensive media management system for organizing and posting content to mu
 
 ## 🏗️ Milestone 1: Core Media Management (Complete)
 
+### 📋 File Classification Rules
+
+**Core File Classification Logic:**
+
+1. **Original Files** (`new_original`)
+   - **Definition**: Filenames that are unrelated to any existing file in the post directory
+   - **Pattern**: `{filename}.{ext}` (no stage suffix)
+   - **Condition**: Base filename doesn't exist in database
+   - **Action**: Create new media record
+   - **Example**: `image1.jpg` (if `image1` doesn't exist)
+
+2. **Promoted Files** (`new_stage`)
+   - **Definition**: File that relates to an original file but is suffixed with a valid stage name
+   - **Pattern**: `{filename}_{stage}.{ext}`
+   - **Valid Stages**: `framed`, `detailed`
+   - **Condition**: Base filename exists in database + valid stage suffix
+   - **Action**: Update existing media record with stage
+   - **Example**: `image1_framed.jpg` relates to `image1.jpg` and adds "framed" stage
+
+3. **Invalid Stage Files** (`invalid_stage`)
+   - **Definition**: File that relates to an original file but has an invalid/unclear stage suffix
+   - **Pattern**: `{filename}_{unknown_suffix}.{ext}`
+   - **Invalid Suffixes**: `v1`, `v2`, `copy`, `final`, `edit`, `draft`, numbers, etc.
+   - **Condition**: Base filename exists + invalid stage suffix
+   - **Action**: Mark as invalid - user needs to determine the correct stage
+   - **Example**: `image1_v1.jpg` relates to `image1.jpg` but user must decide the stage
+
+**File Processing Behavior:**
+- **Original Files**: Create media record + generate thumbnail
+- **Promoted Files**: Update existing record + generate thumbnail for stage
+- **Invalid Stage Files**: Generate thumbnail but flag for user review
+
+**Stage Validation:**
+```python
+VALID_STAGES = ['original', 'framed', 'detailed']  # original is implicit (no suffix)
+VERSION_PATTERNS = ['v\\d+', '\\d+$', 'copy', 'final', 'edit', 'draft']  # Invalid stages
+```
+
 ### System Architecture
 
 **Technology Stack:**

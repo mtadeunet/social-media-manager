@@ -104,6 +104,7 @@ async def scan_post_files(post_id: int, db: Session = Depends(get_db)):
             'new_original': [],
             'new_stage': [],
             'duplicates': [],
+            'invalid_stage': [],
             'invalid': [],
             'orphan_stage': [],
             'updated': []
@@ -136,6 +137,17 @@ async def scan_post_files(post_id: int, db: Session = Depends(get_db)):
                 })
             elif classification_type in ['duplicate_original', 'duplicate_stage']:
                 grouped['duplicates'].append({
+                    'filename': classification['file_path'].name,
+                    'base_name': classification['base_name'],
+                    'stage': classification['stage'],
+                    'extension': classification['extension'],
+                    'classification': classification['classification'],
+                    'action': classification['action'],
+                    'file_path': str(classification['file_path']),
+                    'updated': classification.get('updated', False)
+                })
+            elif classification_type == 'invalid_stage':
+                grouped['invalid_stage'].append({
                     'filename': classification['file_path'].name,
                     'base_name': classification['base_name'],
                     'stage': classification['stage'],
