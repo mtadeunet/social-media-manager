@@ -60,6 +60,18 @@ const MediaGallery: React.FC<MediaGalleryProps> = ({ mediaFiles, invalidFiles = 
     }
   };
 
+  // Helper function to get the actual filename for the selected stage
+  const getStageFilename = (media: MediaFile, stage: 'original' | 'framed' | 'detailed') => {
+    const filePath = getFilePathForStage(media, stage);
+    if (filePath) {
+      // Extract filename from path
+      const pathParts = filePath.split('/');
+      return pathParts[pathParts.length - 1];
+    }
+    // Fallback to base filename + extension
+    return `${media.base_filename}${media.file_extension}`;
+  };
+
   // Helper function to check if media exists at a particular stage
   const mediaExistsAtStage = (media: MediaFile, stage: 'original' | 'framed' | 'detailed') => {
     return !!getFilePathForStage(media, stage);
@@ -247,6 +259,23 @@ const MediaGallery: React.FC<MediaGalleryProps> = ({ mediaFiles, invalidFiles = 
               )}
 
               <div style={{ padding: '12px', borderBottom: '1px solid #e5e7eb' }}>
+                {/* Filename Display */}
+                <div style={{ fontSize: '14px', fontWeight: '500', color: '#374151', marginBottom: '8px' }}>
+                  <span
+                    title={getStageFilename(media, selectedMediaStage)}
+                    style={{
+                      display: 'inline-block',
+                      maxWidth: '100%',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      cursor: 'help'
+                    }}
+                  >
+                    {getStageFilename(media, selectedMediaStage)}
+                  </span>
+                </div>
+
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                   <span
                     style={{
@@ -274,26 +303,6 @@ const MediaGallery: React.FC<MediaGalleryProps> = ({ mediaFiles, invalidFiles = 
                   >
                     🗑️
                   </button>
-                </div>
-
-                <div style={{ fontSize: '14px', fontWeight: '500', color: '#374151', marginBottom: '4px' }}>
-                  <span
-                    title={`${media.base_filename}${media.file_extension}`}
-                    style={{
-                      display: 'inline-block',
-                      maxWidth: '100%',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                      cursor: 'help'
-                    }}
-                  >
-                    {media.base_filename}{media.file_extension}
-                  </span>
-                </div>
-
-                <div style={{ fontSize: '12px', color: '#6b7280' }}>
-                  {media.file_type === 'image' ? '🖼️ Image' : '🎬 Video'}
                 </div>
               </div>
 
