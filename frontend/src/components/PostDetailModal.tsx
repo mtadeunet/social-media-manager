@@ -196,17 +196,6 @@ const PostDetailModal: React.FC<PostDetailModalProps> = ({ postId, onClose, onUp
     }
   };
 
-  const handlePromoteMedia = async (mediaId: number, targetStage: string) => {
-    try {
-      await mediaService.promoteMedia(mediaId, targetStage);
-      refetch();
-      alert(`Media promoted to ${targetStage}!`);
-    } catch (error) {
-      console.error('Failed to promote media:', error);
-      alert('Failed to promote media');
-    }
-  };
-
   const handleDeleteMedia = async (mediaIdToDelete: number) => {
     if (!window.confirm('Are you sure you want to delete this media file?')) {
       return;
@@ -443,7 +432,6 @@ const PostDetailModal: React.FC<PostDetailModalProps> = ({ postId, onClose, onUp
                 key={`${post?.updated_at}-${selectedMediaStage}`} // Force re-render when stage changes
                 mediaFiles={post.media_files || []}
                 invalidFiles={invalidFiles}
-                onPromote={handlePromoteMedia}
                 onDelete={handleDeleteMedia}
                 onImportInvalidFile={handleImportInvalidFile}
                 selectedMediaStage={selectedMediaStage}

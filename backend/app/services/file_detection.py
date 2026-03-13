@@ -296,12 +296,23 @@ def process_detected_files(db: Session, post_id: int, detection_result: Dict) ->
                 summary['processed_files'].append(f"Created new media: {base_name}")
                 
             elif action == 'update_existing':
-                # Update existing media file with new stage
+                # Update existing media file with new stage (single-stage logic)
                 existing_media_record = existing_media.get(base_name)
                 if existing_media_record:
-                    # Update the appropriate stage path
+                    # Clear all existing stage paths first (single-stage behavior)
+                    existing_media_record.original_path = None
+                    existing_media_record.framed_path = None
+                    existing_media_record.detailed_path = None
+                    existing_media_record.original_thumbnail_path = None
+                    existing_media_record.framed_thumbnail_path = None
+                    existing_media_record.detailed_thumbnail_path = None
+                    
+                    # Set the new stage as the only active stage
                     stage = classification['stage']
-                    if stage == 'framed':
+                    if stage == 'original':
+                        existing_media_record.original_path = str(file_path)
+                        existing_media_record.original_thumbnail_path = _generate_thumbnail(file_path)
+                    elif stage == 'framed':
                         existing_media_record.framed_path = str(file_path)
                         existing_media_record.framed_thumbnail_path = _generate_thumbnail(file_path)
                     elif stage == 'detailed':
@@ -309,7 +320,7 @@ def process_detected_files(db: Session, post_id: int, detection_result: Dict) ->
                         existing_media_record.detailed_thumbnail_path = _generate_thumbnail(file_path)
                     
                     summary['new_stage'] += 1
-                    summary['processed_files'].append(f"Updated {base_name} with {stage} stage")
+                    summary['processed_files'].append(f"Moved {base_name} to {stage} stage (single-stage)")
                 else:
                     summary['processed_files'].append(f"Error: Existing media not found for {base_name}")
                 

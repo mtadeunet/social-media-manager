@@ -3,22 +3,13 @@ import type { MediaFile } from '../types/post';
 
 interface MediaGalleryProps {
   mediaFiles: MediaFile[];
-  invalidFiles?: Array<{
-    filename: string;
-    base_name: string;
-    stage: string;
-    extension: string;
-    classification: string;
-    action: string;
-    file_path: string;
-  }>;
-  onPromote: (mediaId: number, targetStage: string) => void;
+  invalidFiles?: any[];
   onDelete: (mediaId: number) => void;
   onImportInvalidFile: (filename: string, targetStage: string) => void;
   selectedMediaStage?: 'original' | 'framed' | 'detailed';
 }
 
-const MediaGallery: React.FC<MediaGalleryProps> = ({ mediaFiles, invalidFiles = [], onPromote, onDelete, onImportInvalidFile, selectedMediaStage = 'original' }) => {
+const MediaGallery: React.FC<MediaGalleryProps> = ({ mediaFiles, invalidFiles = [], onDelete, onImportInvalidFile, selectedMediaStage = 'original' }) => {
   console.log('MediaGallery rendering with', mediaFiles.length, 'media files and', invalidFiles.length, 'invalid files at stage:', selectedMediaStage);
   console.log('Invalid files:', invalidFiles);
   const carouselRef = React.useRef<HTMLDivElement>(null);
@@ -119,17 +110,6 @@ const MediaGallery: React.FC<MediaGalleryProps> = ({ mediaFiles, invalidFiles = 
     }
   };
 
-  const getAvailableStages = (media: MediaFile) => {
-    const stages = [];
-    if (media.original_path && !media.framed_path) {
-      stages.push({ value: 'framed', label: 'Promote to Framed' });
-    }
-    if (media.framed_path && !media.detailed_path) {
-      stages.push({ value: 'detailed', label: 'Promote to Detailed' });
-    }
-    return stages;
-  };
-
   if (filteredMediaFiles.length === 0 && invalidFiles.length === 0) {
     return (
       <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>
@@ -179,7 +159,6 @@ const MediaGallery: React.FC<MediaGalleryProps> = ({ mediaFiles, invalidFiles = 
       >
         {filteredMediaFiles.map((media) => {
           const currentStage = media.detailed_path ? 'detailed' : media.framed_path ? 'framed' : 'original';
-          const availablePromotions = getAvailableStages(media);
 
           return (
             <div
@@ -304,44 +283,6 @@ const MediaGallery: React.FC<MediaGalleryProps> = ({ mediaFiles, invalidFiles = 
                     🗑️
                   </button>
                 </div>
-              </div>
-
-              <div style={{ padding: '12px', backgroundColor: '#f9fafb' }}>
-                <div style={{ fontSize: '12px', fontWeight: '600', color: '#6b7280', marginBottom: '8px' }}>
-                  Available Stages:
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  {media.original_path && (
-                    <div style={{ fontSize: '12px', color: '#374151' }}>
-                      ✓ Original
-                    </div>
-                  )}
-                  {media.framed_path && (
-                    <div style={{ fontSize: '12px', color: '#1d4ed8' }}>
-                      ✓ Framed
-                    </div>
-                  )}
-                  {media.detailed_path && (
-                    <div style={{ fontSize: '12px', color: '#6b21a8' }}>
-                      ✓ Detailed
-                    </div>
-                  )}
-                </div>
-
-                {availablePromotions.length > 0 && (
-                  <div style={{ marginTop: '12px' }}>
-                    {availablePromotions.map(promo => (
-                      <button
-                        key={promo.value}
-                        onClick={() => onPromote(media.id, promo.value)}
-                        className="button"
-                        style={{ width: '100%', fontSize: '13px', padding: '8px' }}
-                      >
-                        ⬆️ {promo.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
               </div>
             </div>
           );
@@ -497,7 +438,7 @@ const MediaGallery: React.FC<MediaGalleryProps> = ({ mediaFiles, invalidFiles = 
           </div>
         ))}
       </div>
-    </div>
+    </div >
   );
 };
 
