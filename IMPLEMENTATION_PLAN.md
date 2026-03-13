@@ -97,6 +97,64 @@ VERSION_PATTERNS = ['v\\d+', '\\d+$', 'copy', 'final', 'edit', 'draft']  # Inval
 - **Backend**: Python 3.13, FastAPI, SQLAlchemy, SQLite
 - **Frontend**: React 18, TypeScript, Tailwind CSS, Axios
 - **Media Processing**: FFmpeg, PIL (Pillow)
+
+### 🎯 Invalid File Handling System (Complete)
+
+**Core Functionality:**
+- **Invalid File Detection**: Automatically identifies files with invalid stage suffixes
+- **Visual Indicators**: Red borders, "INVALID" badges, and hover effects
+- **Import Workflow**: One-click import to convert invalid files to valid stages
+- **Real-time Sync**: Automatic detection of filesystem changes every 10 seconds
+
+**Frontend Features:**
+- **Red Border Display**: Invalid files shown with distinctive red borders
+- **Hover Import Button**: Appears when hovering anywhere over the card
+- **Smooth Animations**: Card lift effect, button scaling, and transitions
+- **Full Filename Tooltips**: Consistent help cursor behavior
+- **Stage-specific Import**: Import to current selected stage
+- **Real-time Updates**: Auto-refresh when files are added/deleted
+
+**Backend API Endpoints:**
+- **`/posts/{id}/scan`**: Detect and classify files including invalid stages
+- **`/posts/{id}/process`**: Process files and handle deletions automatically
+- **`/posts/{id}/import-invalid`**: Rename invalid files to valid stages
+- **`/posts/{id}/clear-stage`**: Remove incorrect stage paths from media records
+
+**File Classification Logic:**
+```python
+# Invalid suffix patterns that trigger invalid_stage classification
+INVALID_SUFFIXES = ['v1', 'v2', 'copy', 'final', 'edit', 'draft', 'version', 'backup']
+VERSION_PATTERNS = [r'v\d+', r'\d+$', r'copy\d*', r'final\d*', r'edit\d*', r'draft\d*']
+
+# Processing behavior
+if classification == 'invalid_stage':
+    # Generate thumbnail but don't create database record
+    # Flag for user import via frontend
+    generate_thumbnail(file_path)
+    mark_for_user_review(file_path)
+```
+
+**User Experience Flow:**
+1. **Detection**: Invalid files automatically detected and flagged
+2. **Display**: Shown with red borders and "INVALID" badges
+3. **Interaction**: Hover reveals import button with smooth animations
+4. **Import**: Click to rename file to valid stage (e.g., `file_v1.jpg` → `file_framed.jpg`)
+5. **Integration**: File becomes normal media file in selected stage
+6. **Cleanup**: Database automatically updated and synced
+
+**Technical Implementation:**
+- **Enhanced MediaGallery Component**: Renders invalid files alongside regular media
+- **PostDetailModal Integration**: Fetches and manages invalid file state
+- **Auto-sync Mechanism**: Polls for filesystem changes every 10 seconds
+- **Robust Error Handling**: Graceful fallbacks and user feedback
+- **Debug Features**: Console logging and manual refresh capabilities
+
+**Visual Design:**
+- **Color Coding**: Red borders (#ef4444) for invalid files
+- **Typography**: "INVALID" badge with clear visual hierarchy
+- **Animations**: 0.2s smooth transitions for all interactions
+- **Responsive**: Consistent behavior across different screen sizes
+- **Accessibility**: Proper tooltips and cursor indicators
 - **Development**: Vite, uvicorn, hot reload
 
 **Architecture Overview:**
@@ -578,24 +636,62 @@ src/
 
 ---
 
-## 🚀 Current Workflow
+## 🎉 Recent Achievements & Current Status
+
+### ✅ Completed Features (March 2026)
+
+#### **Invalid File Handling System**
+- **File Classification**: Detects files with invalid stage suffixes (v1, v2, copy, etc.)
+- **Visual UI**: Red borders, "INVALID" badges, and hover effects
+- **Import Workflow**: One-click import to convert invalid files to valid stages
+- **Real-time Sync**: Automatic filesystem monitoring every 10 seconds
+- **Enhanced UX**: Full-card hover effects, smooth animations, consistent tooltips
+
+#### **Filesystem Synchronization**
+- **Deletion Detection**: Automatically removes database records for deleted files
+- **Auto-processing**: Handles filesystem changes without manual intervention
+- **Stage Management**: Clear incorrect stage assignments via API
+- **Robust Error Handling**: Graceful fallbacks and user feedback
+
+#### **API Enhancements**
+- **Import Endpoint**: `/posts/{id}/import-invalid` for file renaming
+- **Stage Clearing**: `/posts/{id}/clear-stage` for corrections
+- **Enhanced Scanning**: Better file classification and conflict detection
+- **Real-time Updates**: Automatic frontend refresh on changes
+
+### 📊 System Metrics
+- **File Classification**: 3 types (original, promoted, invalid)
+- **Valid Stages**: original, framed, detailed
+- **Invalid Suffixes**: 10+ patterns detected automatically
+- **Sync Frequency**: Every 10 seconds (configurable)
+- **UI Responsiveness**: <200ms animations and transitions
+
+### 🔄 Current Workflow
 
 ### User Flow:
 1. **Create Post** → New post in draft stage
 2. **Upload Media** → Files uploaded to `media/drafts/post_{id}/`
-3. **Scan Files** → Click "Scan Files" to detect and classify
-4. **Review Results** → See classification (new, duplicates, invalid)
-5. **Process Files** → Click "Process Files" to update database
-6. **Filter by Stage** → Use Original/Framed/Detailed buttons
-7. **View Media** → Horizontal carousel with fast scrolling
-8. **Update Post Stage** → Use dropdown to change post workflow stage
+3. **Auto-Detect** → Files automatically scanned and classified every 10 seconds
+4. **Review Results** → See classification (new, duplicates, invalid) with visual indicators
+5. **Handle Invalid Files** → Hover over red-bordered files and click "📥 Import"
+6. **Process Files** → System automatically processes valid files and imports
+7. **Filter by Stage** → Use Original/Framed/Detailed buttons with invalid file counts
+8. **View Media** → Horizontal carousel with smooth animations and import buttons
+9. **Update Post Stage** → Use dropdown to change post workflow stage
+
+### Enhanced Features:
+- **Automatic Sync**: No need for manual scanning - system detects changes automatically
+- **Invalid File Import**: One-click conversion of invalid files to valid stages
+- **Visual Feedback**: Red borders, hover effects, and smooth transitions
+- **Real-time Updates**: Frontend refreshes automatically when files change
+- **Consistent UX**: Same behavior across all file types with proper tooltips
 
 ### Alternative Flow (External Processing):
 1. User drops files directly into post directory
-2. Files named with stage suffixes (`image_framed.jpg`)
-3. Click "Scan Files" in modal
-4. System auto-detects stages from filenames
-5. Click "Process Files" to sync with database
+2. Files automatically detected and classified within 10 seconds
+3. Invalid files appear with red borders for import
+4. System auto-processes valid files and syncs database
+5. User can import invalid files via hover and click interface
 
 ---
 
@@ -611,9 +707,14 @@ src/
 - ✅ Import path errors in file_detection.py
 - ✅ Post model missing `media_root` attribute
 - ✅ Timeout errors on file scanning
+- ✅ Invalid files not displaying in frontend (March 2026)
+- ✅ Frontend not syncing with filesystem changes (March 2026)
+- ✅ Missing tooltips on invalid files (March 2026)
+- ✅ Inconsistent cursor behavior on filenames (March 2026)
+- ✅ Import button only visible on small hover area (March 2026)
 
 ### Current:
-- ⚠️ File detection needs refinement (per user feedback)
+- ✅ File detection system fully implemented and functional (March 2026)
 
 ---
 
