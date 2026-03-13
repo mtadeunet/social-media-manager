@@ -3,14 +3,34 @@ import type { MediaFile } from '../types/post';
 
 interface MediaGalleryProps {
   mediaFiles: MediaFile[];
+  invalidFiles?: Array<{
+    filename: string;
+    base_name: string;
+    stage: string;
+    extension: string;
+    classification: string;
+    action: string;
+    file_path: string;
+  }>;
   onPromote: (mediaId: number, targetStage: string) => void;
   onDelete: (mediaId: number) => void;
+  onImportInvalidFile: (filename: string, targetStage: string) => void;
   selectedMediaStage?: 'original' | 'framed' | 'detailed';
 }
 
-const MediaGallery: React.FC<MediaGalleryProps> = ({ mediaFiles, onPromote, onDelete, selectedMediaStage = 'original' }) => {
-  console.log('MediaGallery rendering with', mediaFiles.length, 'media files at stage:', selectedMediaStage);
+const MediaGallery: React.FC<MediaGalleryProps> = ({ mediaFiles, invalidFiles = [], onPromote, onDelete, onImportInvalidFile, selectedMediaStage = 'original' }) => {
+  console.log('MediaGallery rendering with', mediaFiles.length, 'media files and', invalidFiles.length, 'invalid files at stage:', selectedMediaStage);
+  console.log('Invalid files:', invalidFiles);
   const carouselRef = React.useRef<HTMLDivElement>(null);
+
+  // Helper function to get thumbnail path for invalid files
+  const getInvalidFileThumbnailPath = (invalidFile: any) => {
+    // Generate thumbnail path based on file naming convention
+    const baseName = invalidFile.base_name;
+    const stage = invalidFile.stage;
+    const thumbnailPath = `media/drafts/post_1/thumbnails/${baseName}_${stage}_thumb.jpg`;
+    return thumbnailPath;
+  };
 
   // Helper function to get the correct thumbnail path based on selected stage
   const getThumbnailPathForStage = (media: MediaFile, stage: 'original' | 'framed' | 'detailed') => {
@@ -98,7 +118,7 @@ const MediaGallery: React.FC<MediaGalleryProps> = ({ mediaFiles, onPromote, onDe
     return stages;
   };
 
-  if (filteredMediaFiles.length === 0) {
+  if (filteredMediaFiles.length === 0 && invalidFiles.length === 0) {
     return (
       <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>
         <div style={{ fontSize: '48px', marginBottom: '12px' }}>📷</div>
@@ -119,6 +139,16 @@ const MediaGallery: React.FC<MediaGalleryProps> = ({ mediaFiles, onPromote, onDe
     <div>
       <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px', color: '#1f2937' }}>
         Media Files at {selectedMediaStage.charAt(0).toUpperCase() + selectedMediaStage.slice(1)} Stage ({filteredMediaFiles.length})
+        {invalidFiles.length > 0 && (
+          <span style={{
+            marginLeft: '8px',
+            fontSize: '14px',
+            color: '#ef4444',
+            fontWeight: '500'
+          }}>
+            + {invalidFiles.length} invalid
+          </span>
+        )}
       </h3>
 
       {/* Horizontal Carousel Container */}
@@ -307,6 +337,156 @@ const MediaGallery: React.FC<MediaGalleryProps> = ({ mediaFiles, onPromote, onDe
             </div>
           );
         })}
+
+        {/* Invalid Files - Show in all stages with red border */}
+        {invalidFiles.map((invalidFile) => (
+          <div
+            key={`invalid-${invalidFile.filename}`}
+            style={{
+              border: '3px solid #ef4444', // Red border for invalid files
+              borderRadius: '8px',
+              overflow: 'hidden',
+              backgroundColor: 'white',
+              minWidth: '300px',
+              maxWidth: '300px',
+              width: '300px',
+              flexShrink: 0,
+              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+              position: 'relative',
+              transition: 'box-shadow 0.2s ease, transform 0.2s ease'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.3)';
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              // Show import button when hovering over entire card
+              const importButton = e.currentTarget.querySelector('.import-button');
+              if (importButton) {
+                (importButton as HTMLElement).style.opacity = '1';
+              }
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.1)';
+              e.currentTarget.style.transform = 'translateY(0px)';
+              // Hide import button when leaving card
+              const importButton = e.currentTarget.querySelector('.import-button');
+              if (importButton) {
+                (importButton as HTMLElement).style.opacity = '0';
+              }
+            }}
+          >
+            {/* Import Button - Shows on hover over entire card */}
+            <div
+              className="import-button"
+              style={{
+                position: 'absolute',
+                top: '8px',
+                right: '8px',
+                zIndex: 10,
+                opacity: 0,
+                transition: 'opacity 0.2s ease'
+              }}
+            >
+              <button
+                onClick={() => onImportInvalidFile(invalidFile.filename, selectedMediaStage)}
+                style={{
+                  backgroundColor: '#ef4444',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '6px 8px',
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+                  transition: 'transform 0.2s ease, box-shadow 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'scale(1.05)';
+                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.2)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'scale(1)';
+                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.1)';
+                }}
+                title={`Import to ${selectedMediaStage} stage`}
+              >
+                📥 Import
+              </button>
+            </div>
+
+            {/* Invalid Badge */}
+            <div style={{
+              position: 'absolute',
+              top: '8px',
+              left: '8px',
+              backgroundColor: '#ef4444',
+              color: 'white',
+              fontSize: '10px',
+              fontWeight: '600',
+              padding: '2px 6px',
+              borderRadius: '4px',
+              zIndex: 5
+            }}>
+              INVALID
+            </div>
+
+            {/* Thumbnail */}
+            <div style={{
+              width: '100%',
+              height: '180px',
+              backgroundColor: '#fef2f2', // Light red background
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              overflow: 'hidden',
+              position: 'relative'
+            }}>
+              <img
+                src={`/${getInvalidFileThumbnailPath(invalidFile)}`}
+                alt={invalidFile.filename}
+                style={{
+                  maxWidth: '100%',
+                  maxHeight: '100%',
+                  objectFit: 'contain',
+                  opacity: 0.8 // Slightly transparent to indicate invalid state
+                }}
+                onError={(e) => {
+                  console.warn('Invalid file thumbnail failed to load:', getInvalidFileThumbnailPath(invalidFile));
+                  e.currentTarget.style.display = 'none';
+                }}
+              />
+            </div>
+
+            {/* File Info */}
+            <div style={{ padding: '12px' }}>
+              <div style={{ fontSize: '14px', fontWeight: '600', color: '#1f2937', marginBottom: '4px' }}>
+                <span
+                  title={`${invalidFile.base_name}_${invalidFile.stage}.${invalidFile.extension}`}
+                  style={{
+                    display: 'inline-block',
+                    maxWidth: '100%',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    cursor: 'help'
+                  }}
+                >
+                  {invalidFile.base_name}
+                </span>
+              </div>
+
+              <div style={{ fontSize: '12px', color: '#ef4444', fontWeight: '500', marginBottom: '8px' }}>
+                Stage: "{invalidFile.stage}" (invalid)
+              </div>
+
+              <div style={{ fontSize: '12px', color: '#6b7280' }}>
+                🖼️ Image • Hover to import
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

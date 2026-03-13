@@ -272,3 +272,100 @@ async def get_file_conflicts(post_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error getting conflicts: {str(e)}")
+
+@router.post("/posts/{post_id}/clear-stage")
+async def clear_stage_path(
+    post_id: int,
+    clear_data: dict,
+    db: Session = Depends(get_db)
+):
+    """
+    Clear a specific stage path from a media file.
+    """
+    try:
+        media_id = clear_data['media_id']
+        stage = clear_data['stage']  # 'framed' or 'detailed'
+        
+        # Get the media file
+        from app.models.media import MediaFile
+        media = db.query(MediaFile).filter(MediaFile.id == media_id, MediaFile.post_id == post_id).first()
+        
+        if not media:
+            raise HTTPException(status_code=404, detail="Media file not found")
+        
+        # Clear the stage path and thumbnail
+        if stage == 'framed':
+            media.framed_path = None
+            media.framed_thumbnail_path = None
+        elif stage == 'detailed':
+            media.detailed_path = None
+            media.detailed_thumbnail_path = None
+        
+        db.commit()
+        
+        return {
+            'success': True,
+            'message': f"Cleared {stage} path from media file {media_id}"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error clearing stage path: {str(e)}")
+
+@router.post("/posts/{post_id}/import-invalid")
+async def import_invalid_file(
+    post_id: int,
+    import_data: dict,
+    db: Session = Depends(get_db)
+):
+    """
+    Import an invalid stage file by renaming it to the correct stage.
+    """
+    try:
+        from pathlib import Path
+        
+        original_filename = import_data['original_filename']
+        new_filename = import_data['new_filename']
+        target_stage = import_data['target_stage']
+        
+        # Get the post directory
+        post_dir = Path(f"media/drafts/post_{post_id}")
+        if not post_dir.exists():
+            raise HTTPException(status_code=404, detail="Post directory not found")
+        
+        # Rename the file
+        old_path = post_dir / original_filename
+        new_path = post_dir / new_filename
+        
+        if not old_path.exists():
+            raise HTTPException(status_code=404, detail=f"Original file not found: {original_filename}")
+        
+        if new_path.exists():
+            raise HTTPException(status_code=409, detail=f"Target file already exists: {new_filename}")
+        
+        # Rename the file
+        old_path.rename(new_path)
+        
+        # Rename the thumbnail if it exists
+        old_thumb_path = post_dir / "thumbnails" / f"{Path(original_filename).stem}_thumb.jpg"
+        new_thumb_path = post_dir / "thumbnails" / f"{Path(new_filename).stem}_thumb.jpg"
+        
+        if old_thumb_path.exists():
+            old_thumb_path.rename(new_thumb_path)
+        
+        # Process the newly renamed file
+        from app.services.file_detection import detect_and_classify_files, process_detected_files
+        detection_result = detect_and_classify_files(db, post_id)
+        summary = process_detected_files(db, post_id, detection_result)
+        
+        return {
+            'success': True,
+            'message': f"Successfully imported {original_filename} as {new_filename}",
+            'summary': summary
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error importing file: {str(e)}")

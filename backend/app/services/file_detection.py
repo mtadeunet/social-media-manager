@@ -150,13 +150,17 @@ def detect_deleted_files(db: Session, post_id: int, current_files: List[Path]) -
             media_file.detailed_path
         ]
         
-        # Check if any of the file paths exist in current files
+        # Filter out None/empty paths
+        valid_paths = [path for path in file_paths if path]
+        
+        # Check if any of the valid file paths exist in current files
         file_exists = any(
-            path for path in file_paths 
-            if path and path in current_file_paths
+            path for path in valid_paths 
+            if path in current_file_paths
         )
         
-        if not file_exists:
+        # If no valid paths exist, this media file is deleted
+        if not file_exists and valid_paths:  # Only consider deleted if there were valid paths
             deleted_media.append(media_file)
     
     return deleted_media
@@ -290,6 +294,24 @@ def process_detected_files(db: Session, post_id: int, detection_result: Dict) ->
                 db.add(media)
                 summary['new_original'] += 1
                 summary['processed_files'].append(f"Created new media: {base_name}")
+                
+            elif action == 'update_existing':
+                # Update existing media file with new stage
+                existing_media_record = existing_media.get(base_name)
+                if existing_media_record:
+                    # Update the appropriate stage path
+                    stage = classification['stage']
+                    if stage == 'framed':
+                        existing_media_record.framed_path = str(file_path)
+                        existing_media_record.framed_thumbnail_path = _generate_thumbnail(file_path)
+                    elif stage == 'detailed':
+                        existing_media_record.detailed_path = str(file_path)
+                        existing_media_record.detailed_thumbnail_path = _generate_thumbnail(file_path)
+                    
+                    summary['new_stage'] += 1
+                    summary['processed_files'].append(f"Updated {base_name} with {stage} stage")
+                else:
+                    summary['processed_files'].append(f"Error: Existing media not found for {base_name}")
                 
             elif action == 'regenerate_thumbnail':
                 # Regenerate thumbnail for updated file

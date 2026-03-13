@@ -19,6 +19,7 @@ const PostDetailModal: React.FC<PostDetailModalProps> = ({ postId, onClose, onUp
   const [currentStage, setCurrentStage] = useState<'draft' | 'framed' | 'detailed' | 'done'>('draft');
   const [selectedMediaStage, setSelectedMediaStage] = useState<'original' | 'framed' | 'detailed'>('original');
   const [saving, setSaving] = useState(false);
+  const [invalidFiles, setInvalidFiles] = useState<any[]>([]);
   const captionTextareaRef = React.useRef<HTMLTextAreaElement>(null);
 
   // Start auto-detection when modal opens
@@ -56,6 +57,99 @@ const PostDetailModal: React.FC<PostDetailModalProps> = ({ postId, onClose, onUp
       setSaving(false);
     }
   };
+
+  // Fetch invalid files from file detection API
+  const fetchInvalidFiles = async () => {
+    try {
+      const response = await fetch(`http://localhost:8000/api/file-detection/posts/${postId}/scan`);
+      const data = await response.json();
+      const invalidFiles = data.grouped_classifications.invalid_stage || [];
+      console.log('Fetched invalid files:', invalidFiles);
+      setInvalidFiles(invalidFiles);
+    } catch (error) {
+      console.error('Failed to fetch invalid files:', error);
+      setInvalidFiles([]);
+    }
+  };
+
+  // Import invalid file to specific stage
+  const handleImportInvalidFile = async (filename: string, targetStage: string) => {
+    try {
+      // Extract base name from filename (remove extension and invalid suffix)
+      const baseName = filename.replace(/\.[^/.]+$/, "").replace(/_v\d+.*$/, '');
+
+      // Create new filename with correct stage suffix
+      const newFilename = targetStage === 'original'
+        ? `${baseName}.jpg`
+        : `${baseName}_${targetStage}.jpg`;
+
+      console.log(`Importing ${filename} to ${targetStage} as ${newFilename}`);
+
+      // Call backend API to rename and process the file
+      const response = await fetch(`http://localhost:8000/api/file-detection/posts/${postId}/import-invalid`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          original_filename: filename,
+          new_filename: newFilename,
+          target_stage: targetStage
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to import file');
+      }
+
+      // Refresh data
+      await fetchInvalidFiles();
+      await refetch();
+      onUpdate();
+
+      console.log(`Successfully imported ${filename} as ${newFilename}`);
+    } catch (error) {
+      console.error('Failed to import invalid file:', error);
+      alert('Failed to import file. Please try again.');
+    }
+  };
+
+  // Fetch invalid files when component mounts or stage changes
+  useEffect(() => {
+    console.log('useEffect triggered for fetchInvalidFiles, postId:', postId, 'selectedMediaStage:', selectedMediaStage);
+    fetchInvalidFiles();
+  }, [postId, selectedMediaStage]);
+
+  // Temp: Add manual fetch for debugging
+  const handleManualFetch = () => {
+    console.log('Manual fetch triggered');
+    fetchInvalidFiles();
+  };
+
+  // Auto-sync: Check for filesystem changes every 10 seconds
+  useEffect(() => {
+    const syncInterval = setInterval(async () => {
+      try {
+        const response = await fetch(`http://localhost:8000/api/file-detection/posts/${postId}/scan`);
+        const data = await response.json();
+
+        // If there are deleted files, automatically process them to sync database
+        if (data.deleted_files && data.deleted_files.length > 0) {
+          console.log('Detected deleted files, auto-syncing...');
+          await fetch(`http://localhost:8000/api/file-detection/posts/${postId}/process`, {
+            method: 'POST'
+          });
+          await refetch();
+          onUpdate();
+          await fetchInvalidFiles();
+        }
+      } catch (error) {
+        console.error('Auto-sync check failed:', error);
+      }
+    }, 10000); // Check every 10 seconds
+
+    return () => clearInterval(syncInterval);
+  }, [postId, refetch, onUpdate]);
 
   const handleCaptionBlur = async () => {
     // Only save if the caption has actually changed
@@ -325,11 +419,34 @@ const PostDetailModal: React.FC<PostDetailModalProps> = ({ postId, onClose, onUp
                 </div>
               </div>
 
+              {/* Debug: Temporary button to test invalid files */}
+              <div style={{ marginBottom: '16px', padding: '8px', backgroundColor: '#f3f4f6', borderRadius: '4px' }}>
+                <button
+                  onClick={handleManualFetch}
+                  style={{
+                    padding: '4px 8px',
+                    fontSize: '12px',
+                    backgroundColor: '#3b82f6',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    marginRight: '8px'
+                  }}
+                >
+                  🔄 Fetch Invalid Files
+                </button>
+                <span style={{ fontSize: '12px', color: '#6b7280' }}>
+                  Invalid files: {invalidFiles.length}
+                </span>
+              </div>
+
               <MediaGallery
                 key={`${post?.updated_at}-${selectedMediaStage}`} // Force re-render when stage changes
                 mediaFiles={post.media_files || []}
+                invalidFiles={invalidFiles}
                 onPromote={handlePromoteMedia}
                 onDelete={handleDeleteMedia}
+                onImportInvalidFile={handleImportInvalidFile}
                 selectedMediaStage={selectedMediaStage}
               />
             </div>
