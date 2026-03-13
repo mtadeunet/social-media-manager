@@ -37,6 +37,14 @@ const MediaGallery: React.FC<MediaGalleryProps> = ({ mediaFiles, invalidFiles = 
     }
   };
 
+  // Helper function to get the actual current stage (considering database constraints)
+  const getActualCurrentStage = (media: MediaFile) => {
+    // Priority: detailed > framed > original
+    if (media.detailed_path) return 'detailed';
+    if (media.framed_path) return 'framed';
+    return 'original'; // original_path is always set due to DB constraints
+  };
+
   // Helper function to get the correct file path based on selected stage
   const getFilePathForStage = (media: MediaFile, stage: 'original' | 'framed' | 'detailed') => {
     switch (stage) {
@@ -158,7 +166,7 @@ const MediaGallery: React.FC<MediaGalleryProps> = ({ mediaFiles, invalidFiles = 
         }}
       >
         {filteredMediaFiles.map((media) => {
-          const currentStage = media.detailed_path ? 'detailed' : media.framed_path ? 'framed' : 'original';
+          const currentStage = getActualCurrentStage(media);
 
           return (
             <div
