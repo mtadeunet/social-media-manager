@@ -24,7 +24,8 @@ def get_thumbnail_path(media_path: Path) -> Path:
     thumbnail_dir = media_path.parent / "thumbnails"
     thumbnail_dir.mkdir(parents=True, exist_ok=True)
     
-    filename = media_path.stem + "_thumb" + media_path.suffix
+    # Always use .jpg extension for thumbnails
+    filename = media_path.stem + "_thumb.jpg"
     return thumbnail_dir / filename
 
 def validate_file(file: UploadFile) -> bool:
@@ -106,11 +107,7 @@ async def create_video_thumbnail(video_path: Path, thumbnail_path: Path) -> None
         if video_path.exists():
             thumbnail_path.parent.mkdir(parents=True, exist_ok=True)
             
-            # Always save thumbnail as JPEG with .jpg extension
-            jpeg_thumbnail_path = thumbnail_path.with_suffix('.jpg')
-            
             # Use ffmpeg to extract a thumbnail from the video
-            # Extract frame at 1 second (or 00:00:01 if video is shorter)
             import subprocess
             
             cmd = [
@@ -120,7 +117,7 @@ async def create_video_thumbnail(video_path: Path, thumbnail_path: Path) -> None
                 '-vframes', '1',     # Extract only 1 frame
                 '-vf', 'scale=256:256:force_original_aspect_ratio=decrease',  # Scale to fit in 256x256
                 '-y',                # Overwrite output file
-                str(jpeg_thumbnail_path)
+                str(thumbnail_path)  # thumbnail_path already has .jpg extension
             ]
             
             result = subprocess.run(cmd, capture_output=True, text=True)
@@ -131,13 +128,6 @@ async def create_video_thumbnail(video_path: Path, thumbnail_path: Path) -> None
                     with open(thumbnail_path, 'wb') as dst:
                         dst.write(src.read(1024))  # Just 1KB placeholder
                 print(f"Warning: ffmpeg failed for {video_path}, using placeholder. Error: {result.stderr}")
-            else:
-                # If successful, ensure the thumbnail has the correct .jpg extension
-                if jpeg_thumbnail_path != thumbnail_path:
-                    import shutil
-                    shutil.copy2(jpeg_thumbnail_path, thumbnail_path)
-                    # Clean up the temporary JPEG file
-                    jpeg_thumbnail_path.unlink()
             
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to create video thumbnail: {str(e)}")
