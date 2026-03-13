@@ -28,10 +28,21 @@ def parse_filename(filename: str) -> Tuple[str, Optional[str], str]:
     
     if match:
         base_name, suffix = match.groups()
+        
         if suffix in VALID_STAGES:
             return base_name, suffix, extension
         else:
-            return base_name, suffix, extension  # suffix is invalid
+            # For complex filenames, check if the suffix looks like a version or variant
+            # Common patterns: v1, v2, _1, _2, copy, final, etc.
+            version_patterns = ['v\\d+', '\\d+$', 'copy', 'final', 'edit', 'draft']
+            for pattern in version_patterns:
+                if re.match(pattern, suffix, re.IGNORECASE):
+                    # This might be a version/variant, try to find the base without the version
+                    base_without_version = re.sub(r'_v\d+$|_\d+$|_copy$|_final$|_edit$|_draft$', '', name_without_ext, flags=re.IGNORECASE)
+                    return base_without_version, suffix, extension
+            
+            # If no pattern matches, treat the entire filename as base name (no stage)
+            return name_without_ext, None, extension
     else:
         return name_without_ext, None, extension
 
@@ -42,7 +53,7 @@ def detect_new_files(post_directory: Path) -> List[Path]:
     
     files = []
     for file_path in post_directory.rglob('*'):
-        if file_path.is_file() and not file_path.name.startswith('.'):
+        if file_path.is_file() and not file_path.name.startswith('.') and 'thumbnails' not in str(file_path.parent):
             files.append(file_path)
     
     return files
@@ -65,6 +76,18 @@ def classify_file(file_path: Path, existing_media: Dict[str, MediaFile]) -> Dict
         'action': None,
         'existing_media': None
     }
+    
+    # Special handling for version files - check if they match existing media with version pattern
+    if stage and re.match(r'v\d+|\d+$', stage, re.IGNORECASE):
+        # Try to find existing media that might be the base for this version
+        for existing_base, existing_media_file in existing_media.items():
+            # Check if this version file is related to an existing base file
+            if (file_path.name.startswith(existing_base + '_') or 
+                existing_base + '_' + stage + extension == file_path.stem):
+                classification['classification'] = 'duplicate_original'
+                classification['action'] = 'review'
+                classification['existing_media'] = existing_media_file
+                return classification
     
     if stage is None:
         # No stage suffix - this is a new original file
@@ -94,15 +117,63 @@ def classify_file(file_path: Path, existing_media: Dict[str, MediaFile]) -> Dict
             classification['action'] = 'create_new_with_stage'
     else:
         # Invalid stage suffix
-        classification['classification'] = 'invalid_suffix'
-        classification['action'] = 'mark_invalid'
-        classification['invalid_suffix'] = stage
+        classification['classification'] = 'duplicate_original'
+        classification['action'] = 'review'
     
     return classification
 
-def detect_and_classify_files(db: Session, post_id: int) -> List[Dict]:
+def detect_deleted_files(db: Session, post_id: int, current_files: List[Path]) -> List[MediaFile]:
+    """Detect media files that were deleted from the filesystem."""
+    existing_media = get_existing_media_files(db, post_id)
+    current_file_paths = {str(f) for f in current_files}
+    
+    deleted_media = []
+    for base_filename, media_file in existing_media.items():
+        # Check if any of the media file's paths still exist
+        file_paths = [
+            media_file.original_path,
+            media_file.framed_path,
+            media_file.detailed_path
+        ]
+        
+        # Check if any of the file paths exist in current files
+        file_exists = any(
+            path for path in file_paths 
+            if path and path in current_file_paths
+        )
+        
+        if not file_exists:
+            deleted_media.append(media_file)
+    
+    return deleted_media
+
+def detect_updated_files(current_files: List[Path], existing_thumbnails: Dict[str, str]) -> List[Path]:
+    """Detect files that have been updated (newer than existing thumbnails)."""
+    updated_files = []
+    
+    for file_path in current_files:
+        if file_path.suffix.lower() in ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']:
+            thumbnail_path = _generate_thumbnail_path(file_path)
+            
+            # Check if thumbnail exists and if file is newer than thumbnail
+            if Path(thumbnail_path).exists():
+                try:
+                    file_mtime = file_path.stat().st_mtime
+                    thumbnail_mtime = Path(thumbnail_path).stat().st_mtime
+                    
+                    if file_mtime > thumbnail_mtime:
+                        updated_files.append(file_path)
+                        print(f"Detected updated file: {file_path.name} (file: {file_mtime}, thumb: {thumbnail_mtime})")
+                except FileNotFoundError:
+                    # Thumbnail doesn't exist, will be treated as new
+                    pass
+    
+    return updated_files
+
+def detect_and_classify_files(db: Session, post_id: int) -> Dict:
     """
     Main function to detect and classify all files for a post.
+    Returns classifications for new/updated files and deleted media records.
     """
     import time
     start_time = time.time()
@@ -115,105 +186,187 @@ def detect_and_classify_files(db: Session, post_id: int) -> List[Dict]:
     # Construct the media directory path based on post ID
     # Assuming the structure is: media/drafts/post_{id}/
     post_directory = Path(f"media/drafts/post_{post_id}")
-    print(f"Scanning directory: {post_directory}")
     
     # Detect all files with timeout protection
     all_files = detect_new_files(post_directory)
-    print(f"Found {len(all_files)} files in {time.time() - start_time:.2f}s")
     
-    # Get existing media
+    # Get existing media and thumbnails
     existing_media = get_existing_media_files(db, post_id)
-    print(f"Found {len(existing_media)} existing media records")
     
-    # Classify each file with progress tracking
+    # Get existing thumbnails for update detection
+    existing_thumbnails = {}
+    thumbnails_dir = post_directory / "thumbnails"
+    if thumbnails_dir.exists():
+        for thumb_file in thumbnails_dir.glob("*_thumb.*"):
+            # Map thumbnail back to original file
+            original_name = thumb_file.stem.replace("_thumb", "")
+            original_path = post_directory / f"{original_name}{thumb_file.suffix}"
+            existing_thumbnails[str(original_path)] = str(thumb_file)
+    
+    # Detect deleted files
+    deleted_media = detect_deleted_files(db, post_id, all_files)
+    
+    # Detect updated files
+    updated_files = detect_updated_files(all_files, existing_thumbnails)
+    
+    # Classify each file
     classifications = []
-    for i, file_path in enumerate(all_files):
-        if i % 10 == 0:  # Log progress every 10 files
-            print(f"Processing file {i+1}/{len(all_files)}")
-        
+    for file_path in all_files:
         classification = classify_file(file_path, existing_media)
+        
+        # Mark as updated if file was detected as updated
+        if file_path in updated_files:
+            classification['updated'] = True
+            classification['action'] = 'regenerate_thumbnail'
+        else:
+            classification['updated'] = False
+            
         classifications.append(classification)
     
     total_time = time.time() - start_time
-    print(f"Classification completed in {total_time:.2f}s")
+    print(f"Processed {len(all_files)} files for post {post_id} in {total_time:.2f}s")
     
-    return classifications
+    return {
+        'classifications': classifications,
+        'deleted_media': deleted_media,
+        'updated_files': updated_files
+    }
 
-def process_detected_files(db: Session, post_id: int, classifications: List[Dict]) -> Dict:
+def process_detected_files(db: Session, post_id: int, detection_result: Dict) -> Dict:
     """
     Process detected files and update database accordingly.
     Returns summary of actions taken.
     """
+    classifications = detection_result['classifications']
+    deleted_media = detection_result['deleted_media']
+    updated_files = detection_result['updated_files']
+    
     summary = {
         'new_original': 0,
         'new_stage': 0,
         'duplicates': 0,
         'invalid': 0,
+        'deleted': 0,
+        'updated': 0,
         'processed_files': []
     }
     
+    # Process new/updated files
     for classification in classifications:
-        action = classification['action']
-        file_path = classification['file_path']
         base_name = classification['base_name']
+        file_path = classification['file_path']
         stage = classification['stage']
+        action = classification['action']
         
         try:
             if action == 'create_new':
-                # Create new media file as original
+                # Create new media file
                 media = MediaFile(
                     post_id=post_id,
                     base_filename=base_name,
                     file_extension=classification['extension'],
-                    original_path=str(file_path),
-                    original_thumbnail_path=_generate_thumbnail_path(file_path),
                     file_type=_detect_file_type(classification['extension'])
                 )
+                media.original_path = str(file_path)
+                media.original_thumbnail_path = _generate_thumbnail(file_path)
                 db.add(media)
                 summary['new_original'] += 1
-                summary['processed_files'].append(f"Created new original: {base_name}")
+                summary['processed_files'].append(f"Created new media: {base_name}")
                 
-            elif action == 'update_existing':
-                # Update existing media with new stage
-                existing = classification['existing_media']
-                setattr(existing, f"{stage}_path", str(file_path))
-                setattr(existing, f"{stage}_thumbnail_path", _generate_thumbnail_path(file_path))
-                summary['new_stage'] += 1
-                summary['processed_files'].append(f"Added {stage} stage to: {base_name}")
-                
-            elif action == 'create_new_with_stage':
-                # Create new media file with stage
-                media = MediaFile(
-                    post_id=post_id,
-                    base_filename=base_name,
-                    file_extension=classification['extension'],
-                    file_type=_detect_file_type(classification['extension'])
-                )
-                setattr(media, f"{stage}_path", str(file_path))
-                setattr(media, f"{stage}_thumbnail_path", _generate_thumbnail_path(file_path))
-                db.add(media)
-                summary['new_stage'] += 1
-                summary['processed_files'].append(f"Created new media with {stage} stage: {base_name}")
+            elif action == 'regenerate_thumbnail':
+                # Regenerate thumbnail for updated file
+                thumbnail_path = _generate_thumbnail(file_path)
+                summary['updated'] += 1
+                summary['processed_files'].append(f"Regenerated thumbnail: {base_name} ({thumbnail_path})")
                 
             elif action in ['review', 'mark_invalid']:
+                # Generate thumbnails for valid image files even if they're duplicates
+                if classification['extension'].lower() in ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']:
+                    thumbnail_path = _generate_thumbnail(file_path)
+                    summary['processed_files'].append(
+                        f"Generated thumbnail for {action}: {base_name} ({thumbnail_path})"
+                    )
                 summary['duplicates' if action == 'review' else 'invalid'] += 1
-                summary['processed_files'].append(
-                    f"Flagged for {action}: {base_name} ({classification['classification']})"
-                )
                 
         except Exception as e:
             summary['processed_files'].append(f"Error processing {base_name}: {str(e)}")
     
+    # Process deleted files
+    for media_file in deleted_media:
+        try:
+            # Delete associated thumbnails
+            thumbnail_paths = [
+                media_file.original_thumbnail_path,
+                media_file.framed_thumbnail_path,
+                media_file.detailed_thumbnail_path
+            ]
+            
+            for thumb_path in thumbnail_paths:
+                if thumb_path and Path(thumb_path).exists():
+                    Path(thumb_path).unlink()
+                    summary['processed_files'].append(f"Deleted thumbnail: {thumb_path}")
+            
+            # Delete media record
+            db.delete(media_file)
+            summary['deleted'] += 1
+            summary['processed_files'].append(f"Deleted media record: {media_file.base_filename}")
+            
+        except Exception as e:
+            summary['processed_files'].append(f"Error deleting {media_file.base_filename}: {str(e)}")
+    
     db.commit()
     return summary
 
+def detect_new_files(post_directory: Path) -> List[Path]:
+    """Detect all files in the post directory."""
+    if not post_directory.exists():
+        return []
+    
+    files = []
+    for file_path in post_directory.rglob('*'):
+        if file_path.is_file() and not file_path.name.startswith('.') and 'thumbnails' not in str(file_path.parent):
+            files.append(file_path)
+    
+    return files
+
 def _generate_thumbnail_path(file_path: Path) -> str:
-    """Generate thumbnail path for a given file path."""
-    # This is a placeholder - you might want to implement actual thumbnail generation
+    """Generate the thumbnail path for a given file."""
     parent_dir = file_path.parent
     thumbnail_dir = parent_dir / 'thumbnails'
     thumbnail_name = f"{file_path.stem}_thumb.jpg"
     return str(thumbnail_dir / thumbnail_name)
+
+def _generate_thumbnail(file_path: Path) -> str:
+    """Generate actual thumbnail file and return the path."""
+    try:
+        from PIL import Image
+        import os
+        
+        thumbnail_path = _generate_thumbnail_path(file_path)
+        thumbnail_dir = Path(thumbnail_path).parent
+        
+        # Create thumbnails directory if it doesn't exist
+        thumbnail_dir.mkdir(exist_ok=True)
+        
+        # Generate thumbnail for images
+        if file_path.suffix.lower() in ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']:
+            with Image.open(file_path) as img:
+                # Convert to RGB if necessary
+                if img.mode in ('RGBA', 'P'):
+                    img = img.convert('RGB')
+                
+                # Resize to thumbnail size
+                img.thumbnail((300, 300), Image.Resampling.LANCZOS)
+                img.save(thumbnail_path, 'JPEG', quality=85)
+                return thumbnail_path
+        
+        # For videos and other files, create a placeholder or return the path
+        # For now, just return the path (the frontend will show a placeholder)
+        return thumbnail_path
+        
+    except Exception as e:
+        print(f"Error generating thumbnail for {file_path}: {e}")
+        return _generate_thumbnail_path(file_path)
 
 def _detect_file_type(extension: str) -> str:
     """Detect file type from extension."""

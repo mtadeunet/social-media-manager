@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { usePost } from '../hooks/useApi';
-import { mediaService, postService } from '../services/api';
+import { autoDetectionService, mediaService, postService } from '../services';
 import type { MediaFile } from '../types/post';
-import FileDetection from './FileDetection';
 import MediaGallery from './MediaGallery';
 import MediaUpload from './MediaUpload';
 
@@ -21,6 +20,19 @@ const PostDetailModal: React.FC<PostDetailModalProps> = ({ postId, onClose, onUp
   const [selectedMediaStage, setSelectedMediaStage] = useState<'original' | 'framed' | 'detailed'>('original');
   const [saving, setSaving] = useState(false);
   const captionTextareaRef = React.useRef<HTMLTextAreaElement>(null);
+
+  // Start auto-detection when modal opens
+  useEffect(() => {
+    autoDetectionService.startAutoDetection(postId, async () => {
+      await refetch();
+      onUpdate();
+    });
+
+    // Cleanup when modal closes
+    return () => {
+      autoDetectionService.stopAutoDetection(postId);
+    };
+  }, [postId, refetch, onUpdate]);
 
   useEffect(() => {
     if (post) {
@@ -321,15 +333,6 @@ const PostDetailModal: React.FC<PostDetailModalProps> = ({ postId, onClose, onUp
                 selectedMediaStage={selectedMediaStage}
               />
             </div>
-
-            {/* File Detection Section */}
-            <FileDetection
-              postId={postId}
-              onFilesProcessed={async () => {
-                await refetch();
-                onUpdate();
-              }}
-            />
 
             {/* Upload Section */}
             <div style={{ marginBottom: '24px', paddingTop: '24px', borderTop: '2px solid #e5e7eb' }}>

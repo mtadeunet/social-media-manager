@@ -163,7 +163,7 @@ const MediaGallery: React.FC<MediaGalleryProps> = ({ mediaFiles, onPromote, onDe
                   justifyContent: 'center',
                   overflow: 'hidden'
                 }}>
-                  {mediaExistsAtStage(media, selectedMediaStage) && getThumbnailPathForStage(media, selectedMediaStage) ? (
+                  {getThumbnailPathForStage(media, selectedMediaStage) ? (
                     <img
                       src={`/${getThumbnailPathForStage(media, selectedMediaStage)}`}
                       alt={`${media.base_filename} (${selectedMediaStage})`}
@@ -171,6 +171,10 @@ const MediaGallery: React.FC<MediaGalleryProps> = ({ mediaFiles, onPromote, onDe
                         maxWidth: '100%',
                         maxHeight: '100%',
                         objectFit: 'contain'
+                      }}
+                      onError={(e) => {
+                        console.warn('Thumbnail failed to load, showing placeholder:', getThumbnailPathForStage(media, selectedMediaStage));
+                        e.currentTarget.style.display = 'none';
                       }}
                     />
                   ) : (
@@ -190,7 +194,7 @@ const MediaGallery: React.FC<MediaGalleryProps> = ({ mediaFiles, onPromote, onDe
                   justifyContent: 'center',
                   overflow: 'hidden'
                 }}>
-                  {mediaExistsAtStage(media, selectedMediaStage) && getThumbnailPathForStage(media, selectedMediaStage) ? (
+                  {getThumbnailPathForStage(media, selectedMediaStage) ? (
                     <img
                       src={`/${getThumbnailPathForStage(media, selectedMediaStage)}`}
                       alt={`${media.base_filename} (${selectedMediaStage})`}
@@ -198,6 +202,10 @@ const MediaGallery: React.FC<MediaGalleryProps> = ({ mediaFiles, onPromote, onDe
                         maxWidth: '100%',
                         maxHeight: '100%',
                         objectFit: 'contain'
+                      }}
+                      onError={(e) => {
+                        console.warn('Video thumbnail failed to load, showing placeholder:', getThumbnailPathForStage(media, selectedMediaStage));
+                        e.currentTarget.style.display = 'none';
                       }}
                     />
                   ) : (
@@ -237,7 +245,19 @@ const MediaGallery: React.FC<MediaGalleryProps> = ({ mediaFiles, onPromote, onDe
                 </div>
 
                 <div style={{ fontSize: '14px', fontWeight: '500', color: '#374151', marginBottom: '4px' }}>
-                  {media.base_filename}{media.file_extension}
+                  <span
+                    title={`${media.base_filename}${media.file_extension}`}
+                    style={{
+                      display: 'inline-block',
+                      maxWidth: '100%',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      cursor: 'help'
+                    }}
+                  >
+                    {media.base_filename}{media.file_extension}
+                  </span>
                 </div>
 
                 <div style={{ fontSize: '12px', color: '#6b7280' }}>
