@@ -80,6 +80,7 @@ def classify_file(file_path: Path, existing_media: Dict[str, MediaFile]) -> Dict
     # Special handling for version files - check if they match existing media with version pattern
     if stage and re.match(r'v\d+|\d+$', stage, re.IGNORECASE):
         # Try to find existing media that might be the base for this version
+        found_related_media = False
         for existing_base, existing_media_file in existing_media.items():
             # Check if this version file is related to an existing base file
             if (file_path.name.startswith(existing_base + '_') or 
@@ -87,7 +88,14 @@ def classify_file(file_path: Path, existing_media: Dict[str, MediaFile]) -> Dict
                 classification['classification'] = 'duplicate_original'
                 classification['action'] = 'review'
                 classification['existing_media'] = existing_media_file
-                return classification
+                found_related_media = True
+                break
+        
+        # If no related media found, treat as new original file
+        if not found_related_media:
+            classification['classification'] = 'new_original'
+            classification['action'] = 'create_new'
+            return classification
     
     if stage is None:
         # No stage suffix - this is a new original file
@@ -241,6 +249,9 @@ def process_detected_files(db: Session, post_id: int, detection_result: Dict) ->
     deleted_media = detection_result['deleted_media']
     updated_files = detection_result['updated_files']
     
+    # Get existing media for duplicate checking
+    existing_media = get_existing_media_files(db, post_id)
+    
     summary = {
         'new_original': 0,
         'new_stage': 0,
@@ -280,13 +291,50 @@ def process_detected_files(db: Session, post_id: int, detection_result: Dict) ->
                 summary['processed_files'].append(f"Regenerated thumbnail: {base_name} ({thumbnail_path})")
                 
             elif action in ['review', 'mark_invalid']:
-                # Generate thumbnails for valid image files even if they're duplicates
-                if classification['extension'].lower() in ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']:
-                    thumbnail_path = _generate_thumbnail(file_path)
+                # For review action (duplicates), create media record and generate thumbnail
+                if action == 'review' and classification['extension'].lower() in ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp']:
+                    # Use the full filename (without extension) as base name for duplicates
+                    duplicate_base_name = file_path.stem
+                    
+                    # Check if media record already exists for this exact file
+                    existing_media_for_file = None
+                    for existing_base, existing_media_record in existing_media.items():
+                        if (existing_media_record.original_path == str(file_path) or
+                            existing_base == duplicate_base_name):
+                            existing_media_for_file = existing_media_record
+                            break
+                    
+                    if existing_media_for_file:
+                        # Update existing record or generate thumbnail if needed
+                        if not existing_media_for_file.original_thumbnail_path or not Path(existing_media_for_file.original_thumbnail_path).exists():
+                            existing_media_for_file.original_thumbnail_path = _generate_thumbnail(file_path)
+                            summary['processed_files'].append(
+                                f"Updated thumbnail for existing duplicate: {duplicate_base_name}"
+                            )
+                        else:
+                            summary['processed_files'].append(
+                                f"Duplicate already exists: {duplicate_base_name}"
+                            )
+                    else:
+                        # Create new media record for duplicate file
+                        media = MediaFile(
+                            post_id=post_id,
+                            base_filename=duplicate_base_name,
+                            file_extension=classification['extension'],
+                            file_type=_detect_file_type(classification['extension'])
+                        )
+                        media.original_path = str(file_path)
+                        media.original_thumbnail_path = _generate_thumbnail(file_path)
+                        db.add(media)
+                        summary['processed_files'].append(
+                            f"Created media record for duplicate: {duplicate_base_name} ({str(file_path)})"
+                        )
+                else:
+                    # For invalid files or non-image duplicates, just count them
+                    summary['duplicates' if action == 'review' else 'invalid'] += 1
                     summary['processed_files'].append(
-                        f"Generated thumbnail for {action}: {base_name} ({thumbnail_path})"
+                        f"Flagged for {action}: {base_name} ({classification['classification']})"
                     )
-                summary['duplicates' if action == 'review' else 'invalid'] += 1
                 
         except Exception as e:
             summary['processed_files'].append(f"Error processing {base_name}: {str(e)}")

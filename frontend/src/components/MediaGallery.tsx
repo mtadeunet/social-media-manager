@@ -46,7 +46,9 @@ const MediaGallery: React.FC<MediaGalleryProps> = ({ mediaFiles, onPromote, onDe
   };
 
   // Filter media files to only show those that exist at the selected stage
-  const filteredMediaFiles = mediaFiles.filter(media => mediaExistsAtStage(media, selectedMediaStage));
+  const filteredMediaFiles = mediaFiles
+    .filter(media => mediaExistsAtStage(media, selectedMediaStage))
+    .sort((a, b) => a.base_filename.localeCompare(b.base_filename));
 
   // Add non-passive wheel event listener for horizontal scrolling
   React.useEffect(() => {

@@ -68,7 +68,7 @@ async def background_scan_and_process(post_id: int, db: Session):
         thumbnail_needed_files = [
             c for c in classifications 
             if (c['action'] in ['review', 'mark_invalid'] and 
-                c['extension'].lower() in ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'])
+                c['extension'].lower() in ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'])
         ]
         
         if processable_files or thumbnail_needed_files or deleted_media or updated_files:
@@ -111,8 +111,53 @@ async def scan_post_files(post_id: int, db: Session = Depends(get_db)):
         
         for classification in classifications:
             classification_type = classification['classification']
-            if classification_type in grouped:
-                grouped[classification_type].append({
+            # Map classification types to grouped categories
+            if classification_type == 'new_original':
+                grouped['new_original'].append({
+                    'filename': classification['file_path'].name,
+                    'base_name': classification['base_name'],
+                    'stage': classification['stage'],
+                    'extension': classification['extension'],
+                    'classification': classification['classification'],
+                    'action': classification['action'],
+                    'file_path': str(classification['file_path']),
+                    'updated': classification.get('updated', False)
+                })
+            elif classification_type == 'new_stage':
+                grouped['new_stage'].append({
+                    'filename': classification['file_path'].name,
+                    'base_name': classification['base_name'],
+                    'stage': classification['stage'],
+                    'extension': classification['extension'],
+                    'classification': classification['classification'],
+                    'action': classification['action'],
+                    'file_path': str(classification['file_path']),
+                    'updated': classification.get('updated', False)
+                })
+            elif classification_type in ['duplicate_original', 'duplicate_stage']:
+                grouped['duplicates'].append({
+                    'filename': classification['file_path'].name,
+                    'base_name': classification['base_name'],
+                    'stage': classification['stage'],
+                    'extension': classification['extension'],
+                    'classification': classification['classification'],
+                    'action': classification['action'],
+                    'file_path': str(classification['file_path']),
+                    'updated': classification.get('updated', False)
+                })
+            elif classification_type == 'invalid_suffix':
+                grouped['invalid'].append({
+                    'filename': classification['file_path'].name,
+                    'base_name': classification['base_name'],
+                    'stage': classification['stage'],
+                    'extension': classification['extension'],
+                    'classification': classification['classification'],
+                    'action': classification['action'],
+                    'file_path': str(classification['file_path']),
+                    'updated': classification.get('updated', False)
+                })
+            elif classification_type == 'orphan_stage':
+                grouped['orphan_stage'].append({
                     'filename': classification['file_path'].name,
                     'base_name': classification['base_name'],
                     'stage': classification['stage'],
