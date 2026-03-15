@@ -18,6 +18,7 @@ class Post(Base):
     
     # Relationships
     media_files = relationship("MediaFile", back_populates="post", cascade="all, delete-orphan")
+    referenced_media = relationship("MediaVault", secondary="post_media_references", back_populates="posts")
     
     def __repr__(self):
         return f"<Post(id={self.id}, stage={self.stage})>"
