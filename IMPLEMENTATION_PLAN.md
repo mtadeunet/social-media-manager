@@ -51,7 +51,204 @@ A comprehensive media management system for organizing and posting content to mu
 
 ---
 
-## 🏗️ Milestone 1: Core Media Management (Complete)
+## 🏗️ Milestone 1: Media Vault Foundation (In Progress)
+
+### 🎯 Core System Architecture
+The Media Vault system transforms the application from post-centric to media-centric architecture, where media management becomes the core foundation and posts become consumers of media.
+
+### 📊 Database Schema
+
+#### MediaVault Model (Primary Entity)
+```python
+class MediaVault(Base):
+    __tablename__ = "media_vault"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    base_filename = Column(String, nullable=False)  # Original name without hash
+    file_type = Column(String, nullable=False)  # image/video
+    is_usable = Column(Boolean, default=False)  # Marked for post usage
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    versions = relationship("MediaVersion", back_populates="media_vault", cascade="all, delete-orphan")
+    enhancement_tags = relationship("EnhancementTag", secondary="media_enhancement_tags", back_populates="media_vaults")
+    style_tags = relationship("StyleTag", secondary="media_style_tags", back_populates="media_vaults")
+    platform_tags = relationship("PlatformTag", secondary="media_platform_tags", back_populates="media_vaults")
+    posts = relationship("Post", secondary="post_media_references", back_populates="referenced_media")
+```
+
+#### MediaVersion Model (Version Tracking)
+```python
+class MediaVersion(Base):
+    __tablename__ = "media_versions"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    media_vault_id = Column(Integer, ForeignKey("media_vault.id"), nullable=False)
+    filename = Column(String, nullable=False)  # {original}_{hash4}.jpg
+    file_path = Column(String, nullable=False)
+    thumbnail_path = Column(String, nullable=True)
+    file_size = Column(Integer, nullable=False)
+    upload_date = Column(DateTime, default=datetime.utcnow)
+    is_active = Column(Boolean, default=True)  # Soft delete capability
+```
+
+#### Tag System Models
+```python
+class EnhancementTag(Base):
+    __tablename__ = "enhancement_tags"
+    id = Column(Integer, primary_key=True)
+    name = Column(String, unique=True, nullable=False)  # original, crop, edit, detail
+    description = Column(Text, nullable=True)
+    color = Column(String, default="#6b7280")
+
+class StyleTag(Base):
+    __tablename__ = "style_tags"
+    id = Column(Integer, primary_key=True)
+    name = Column(String, unique=True, nullable=False)  # fitting room, stockings, gym, cosplay
+    progression_stage = Column(Integer, default=1)  # 1-5 progression
+    description = Column(Text, nullable=True)
+    color = Column(String, default="#3b82f6")
+
+class PlatformTag(Base):
+    __tablename__ = "platform_tags"
+    id = Column(Integer, primary_key=True)
+    name = Column(String, unique=True, nullable=False)  # instagram, twitter, tiktok
+    icon = Column(String, nullable=True)  # Icon name or emoji
+    color = Column(String, default="#10b981")
+```
+
+### 🔧 API Endpoints
+
+#### Media Vault Management
+```python
+GET    /api/media-vault/                    # List with filtering
+POST   /api/media-vault/upload              # Upload new media
+GET    /api/media-vault/{id}                 # Get media details
+PUT    /api/media-vault/{id}/usable          # Toggle usability
+DELETE /api/media-vault/{id}                 # Delete media
+
+# Version Management
+POST   /api/media-vault/{id}/versions        # Add new version
+DELETE /api/media-vault/{id}/versions/{v_id} # Delete specific version
+```
+
+#### Tag Management
+```python
+GET    /api/tags/enhancement                 # List enhancement tags
+POST   /api/tags/enhancement                 # Create enhancement tag
+PUT    /api/tags/enhancement/{id}            # Update enhancement tag
+DELETE /api/tags/enhancement/{id}            # Delete enhancement tag
+
+GET    /api/tags/style                       # List style tags
+POST   /api/tags/style                       # Create style tag
+PUT    /api/tags/style/{id}                  # Update style tag
+DELETE /api/tags/style/{id}                  # Delete style tag
+
+GET    /api/tags/platform                    # List platform tags
+POST   /api/tags/platform                    # Create platform tag
+PUT    /api/tags/platform/{id}               # Update platform tag
+DELETE /api/tags/platform/{id}               # Delete platform tag
+
+POST   /api/tags/initialize-defaults         # Initialize default tags
+```
+
+### 🎨 Frontend Components
+
+#### MediaVaultGallery (Main Interface)
+```typescript
+interface MediaVaultGalleryProps {
+  mediaItems: MediaVault[];
+  selectedFilters: FilterState;
+  onMediaClick: (mediaId: number) => void;
+  onFilterChange: (filters: FilterState) => void;
+}
+
+interface FilterState {
+  searchTerm: string;
+  enhancementTags: number[];
+  styleTags: number[];
+  platformTags: number[];
+  dateRange: [Date, Date] | null;
+  showUsableOnly: boolean;
+}
+```
+
+#### MediaManagementModal (Version Control)
+```typescript
+interface MediaManagementModalProps {
+  media: MediaVault;
+  isOpen: boolean;
+  onClose: () => void;
+  onVersionUpload: (file: File, tags: number[]) => void;
+  onVersionDelete: (versionId: number) => void;
+  onTagUpdate: (versionId: number, tags: TagUpdate[]) => void;
+  onUsabilityToggle: (mediaId: number, isUsable: boolean) => void;
+}
+```
+
+#### MediaComparer (Version Comparison)
+```typescript
+interface MediaComparerProps {
+  media: MediaVault;
+  selectedVersions: [number, number];
+  onVersionSelect: (position: 'left' | 'right', versionId: number) => void;
+}
+```
+
+### 🎯 File Processing Pipeline
+
+#### Upload Processing
+1. **File Validation**: Check file type and size
+2. **Format Conversion**: PNG → JPG for storage optimization
+3. **Hash Generation**: SHA-256 hash for unique naming
+4. **Filename Creation**: `{original}_{hash4}.jpg`
+5. **Thumbnail Generation**: 256x256 thumbnail
+6. **Database Storage**: Create MediaVault and MediaVersion records
+
+#### File Structure
+```
+media/vault/
+├── 2026/03/  # Date-based organization
+│   ├── {media_id}/
+│   │   ├── original_{hash4}.jpg
+│   │   ├── crop_detail_{hash4}.jpg
+│   │   ├── thumbnail_{hash4}.jpg
+│   │   └── metadata.json
+```
+
+### 📊 Default Tags Configuration
+
+#### Enhancement Tags
+```json
+[
+  { "name": "original", "color": "#6b7280", "description": "Original uploaded file" },
+  { "name": "crop", "color": "#f59e0b", "description": "Cropped version" },
+  { "name": "edit", "color": "#3b82f6", "description": "General editing applied" },
+  { "name": "detail", "color": "#8b5cf6", "description": "Detailed enhancement" }
+]
+```
+
+#### Style Tags
+```json
+[
+  { "name": "fitting room", "color": "#ef4444", "progression_stage": 1 },
+  { "name": "stockings", "color": "#f97316", "progression_stage": 1 },
+  { "name": "gym", "color": "#eab308", "progression_stage": 1 },
+  { "name": "cosplay", "color": "#22c55e", "progression_stage": 1 }
+]
+```
+
+#### Platform Tags
+```json
+[
+  { "name": "instagram", "icon": "📷", "color": "#e1306c" },
+  { "name": "twitter", "icon": "🐦", "color": "#1da1f2" },
+  { "name": "tiktok", "icon": "🎵", "color": "#000000" }
+]
+```
+
+## 🏗️ Milestone 2: Post-Centric Workflow (Complete ✅)
 
 ### 📋 File Classification Rules
 
@@ -120,20 +317,6 @@ VERSION_PATTERNS = ['v\\d+', '\\d+$', 'copy', 'final', 'edit', 'draft']  # Inval
 - **`/posts/{id}/import-invalid`**: Rename invalid files to valid stages
 - **`/posts/{id}/clear-stage`**: Remove incorrect stage paths from media records
 
-**File Classification Logic:**
-```python
-# Invalid suffix patterns that trigger invalid_stage classification
-INVALID_SUFFIXES = ['v1', 'v2', 'copy', 'final', 'edit', 'draft', 'version', 'backup']
-VERSION_PATTERNS = [r'v\d+', r'\d+$', r'copy\d*', r'final\d*', r'edit\d*', r'draft\d*']
-
-# Processing behavior
-if classification == 'invalid_stage':
-    # Generate thumbnail but don't create database record
-    # Flag for user import via frontend
-    generate_thumbnail(file_path)
-    mark_for_user_review(file_path)
-```
-
 **User Experience Flow:**
 1. **Detection**: Invalid files automatically detected and flagged
 2. **Display**: Shown with red borders and "INVALID" badges
@@ -142,374 +325,9 @@ if classification == 'invalid_stage':
 5. **Integration**: File becomes normal media file in selected stage
 6. **Cleanup**: Database automatically updated and synced
 
-**Technical Implementation:**
-- **Enhanced MediaGallery Component**: Renders invalid files alongside regular media
-- **PostDetailModal Integration**: Fetches and manages invalid file state
-- **Auto-sync Mechanism**: Polls for filesystem changes every 10 seconds
-- **Robust Error Handling**: Graceful fallbacks and user feedback
-- **Debug Features**: Console logging and manual refresh capabilities
-
-**Visual Design:**
-- **Color Coding**: Red borders (#ef4444) for invalid files
-- **Typography**: "INVALID" badge with clear visual hierarchy
-- **Animations**: 0.2s smooth transitions for all interactions
-- **Responsive**: Consistent behavior across different screen sizes
-- **Accessibility**: Proper tooltips and cursor indicators
-- **Development**: Vite, uvicorn, hot reload
-
-**Architecture Overview:**
-```
-┌─────────────────┐    HTTP/REST API    ┌─────────────────┐
-│   React SPA     │ ◄─────────────────► │   FastAPI       │
-│                 │                     │   Backend       │
-│ - Components    │                     │                 │
-│ - State Mgmt    │                     │ - Routes        │
-│ - UI/UX         │                     │ - Services      │
-└─────────────────┘                     │ - Database      │
-        │                               └─────────────────┘
-        │                                        │
-        │                                   File System
-        │                               ┌─────────────────┐
-        └──────────────────────────────► │   Media Files   │
-                                        │                 │
-                                        │ - Uploads       │
-                                        │ - Thumbnails    │
-                                        │ - Processing    │
-                                        └─────────────────┘
-```
-
-**Data Flow:**
-1. **Frontend** → HTTP Request → **FastAPI Router**
-2. **Router** → Service Layer → **Database/File System**
-3. **Service** → Process Data → **Response**
-4. **Response** → JSON → **Frontend State Update**
-
-### Backend Implementation Details
-
-#### FastAPI Application Structure (`app/main.py`)
-```python
-# Core Configuration
-app = FastAPI(title="Social Media Manager API", debug=True)
-
-# Middleware Stack
-- CORSMiddleware: Allow localhost:3000
-- StaticFiles: Serve /media directory
-- Database: Auto-create tables on startup
-
-# Route Structure
-/api/posts          → Post CRUD operations
-/api/media          → Media upload/management
-/api/file-detection → File scanning/classification
-/media              → Static file serving
-```
-
-#### Database Layer (`app/models/`)
-
-**Post Model:**
-```python
-class Post(Base):
-    __tablename__ = "posts"
-    
-    id = Column(Integer, primary_key=True)
-    caption = Column(Text, nullable=True)
-    stage = Column(String, default="draft")  # draft|framed|detailed|done
-    is_posted = Column(Boolean, default=False)
-    first_posted_at = Column(DateTime, nullable=True)
-    first_platform_id = Column(Integer, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
-    # Relationships
-    media_files = relationship("MediaFile", back_populates="post", cascade="all, delete-orphan")
-```
-
-**MediaFile Model:**
-```python
-class MediaFile(Base):
-    __tablename__ = "media_files"
-    
-    id = Column(Integer, primary_key=True)
-    post_id = Column(Integer, ForeignKey("posts.id"))
-    base_filename = Column(String, nullable=False)
-    file_extension = Column(String, nullable=False)
-    
-    # Stage-specific paths
-    original_path = Column(String, nullable=False)
-    framed_path = Column(String, nullable=True)
-    detailed_path = Column(String, nullable=True)
-    
-    # Thumbnail paths
-    original_thumbnail_path = Column(String, nullable=True)
-    framed_thumbnail_path = Column(String, nullable=True)
-    detailed_thumbnail_path = Column(String, nullable=True)
-    
-    file_type = Column(String, nullable=False)  # image|video
-    order_index = Column(Integer, default=0)
-    
-    # Relationships
-    post = relationship("Post", back_populates="media_files")
-```
-
-#### API Endpoints
-
-**Posts API (`app/api/posts.py`):**
-```python
-GET    /api/posts              # List posts (optional stage filter)
-POST   /api/posts              # Create new post
-GET    /api/posts/{id}         # Get post details
-PUT    /api/posts/{id}         # Update post
-DELETE /api/posts/{id}         # Delete post
-```
-
-**Media API (`app/api/media.py`):**
-```python
-POST   /api/media/upload       # Upload file to post
-POST   /api/media/{id}/promote # Promote media to next stage
-DELETE /api/media/{id}         # Delete media file
-```
-
-**File Detection API (`app/api/file_detection.py`):**
-```python
-GET    /api/file-detection/posts/{id}/scan     # Scan and classify files
-POST   /api/file-detection/posts/{id}/process  # Process scanned files
-GET    /api/file-detection/posts/{id}/conflicts # Get conflicts only
-```
-
-#### Services Layer
-
-**File Detection Service (`app/services/file_detection.py`):**
-```python
-# Core Functions
-parse_filename(filename) → (base_name, stage, extension)
-detect_new_files(directory) → List[Path]
-classify_file(file_path, existing_media) → Classification
-detect_and_classify_files(db, post_id) → List[Classification]
-process_detected_files(db, post_id, classifications) → Summary
-
-# Classification Types
-- new_original: New file without stage suffix
-- new_stage: Valid stage suffix for existing media
-- duplicate_stage: Stage already exists for media
-- invalid_suffix: Unrecognized stage name
-- orphan_stage: Stage file without matching original
-```
-
-**Media Processing (`app/core/media_utils.py`):**
-```python
-# Thumbnail Generation
-create_thumbnail(input_path, output_path, size=(256, 256))
-create_video_thumbnail(input_path, output_path, size=(256, 256))
-
-# File Type Detection
-detect_file_type(extension) → "image" | "video" | "unknown"
-get_media_type(file_path) → MIME type
-
-# Validation
-validate_file_upload(file) → ValidationResponse
-generate_safe_filename(filename) → safe_filename
-```
-
-### Frontend Implementation Details
-
-#### Component Architecture
-
-**Component Hierarchy:**
-```
-App
-├── PostsList
-│   ├── PostCard
-│   └── PostDetailModal
-│       ├── MediaGallery
-│       │   ├── MediaCard (Image/Video)
-│       │   └── StageFilter
-│       ├── FileDetection
-│       ├── MediaUpload
-│       └── PostControls
-└── Layout
-    ├── Header
-    └── Navigation
-```
-
-#### State Management
-
-**Custom Hooks (`src/hooks/useApi.ts`):**
-```typescript
-// Posts Management
-usePosts(stage?: string) → { posts, loading, error, createPost, updatePost, deletePost, refetch }
-usePost(postId) → { post, loading, error, refetch }
-
-// Media Management
-useMedia(postId) → { media, loading, error, uploadMedia, deleteMedia, promoteMedia }
-```
-
-**Local State Patterns:**
-```typescript
-// Modal Management
-const [selectedPostId, setSelectedPostId] = useState<number | null>(null);
-
-// Stage Selection
-const [selectedMediaStage, setSelectedMediaStage] = useState<'original' | 'framed' | 'detailed'>('original');
-
-// Form State
-const [caption, setCaption] = useState('');
-const [postStage, setPostStage] = useState('draft');
-```
-
-#### Service Layer (`src/services/`)
-
-**API Service (`src/services/api.ts`):**
-```typescript
-// Axios Configuration
-- Base URL: http://localhost:8000
-- Timeout: 10s (35s for file operations)
-- Interceptors: Error handling, loading states
-
-// Endpoints
-postService: CRUD operations for posts
-mediaService: Upload, delete, promote media
-fileDetectionService: Scan, process, conflict detection
-```
-
-**Type System (`src/types/post.ts`):**
-```typescript
-interface Post {
-  id: number;
-  caption?: string;
-  stage: 'draft' | 'framed' | 'detailed' | 'done';
-  is_posted: boolean;
-  first_posted_at?: string;
-  first_platform_id?: number;
-  created_at: string;
-  updated_at: string;
-  media_files?: MediaFile[];
-}
-
-interface MediaFile {
-  id: number;
-  post_id: number;
-  base_filename: string;
-  file_extension: string;
-  original_path: string;
-  framed_path?: string;
-  detailed_path?: string;
-  original_thumbnail_path?: string;
-  framed_thumbnail_path?: string;
-  detailed_thumbnail_path?: string;
-  file_type: 'image' | 'video';
-  order_index: number;
-}
-```
-
-#### UI Components
-
-**MediaGallery (`src/components/MediaGallery.tsx`):**
-```typescript
-// Features
-- Horizontal carousel layout
-- 6x speed mouse wheel scrolling
-- Stage-aware filtering
-- Count badges per stage
-- Responsive card design (300px width)
-
-// Props
-interface MediaGalleryProps {
-  mediaFiles: MediaFile[];
-  onPromote: (mediaId: number, stage: string) => void;
-  onDelete: (mediaId: number) => void;
-  selectedMediaStage?: 'original' | 'framed' | 'detailed';
-}
-```
-
-**FileDetection (`src/components/FileDetection.tsx`):**
-```typescript
-// Features
-- File scanning with progress
-- Classification display with icons
-- Conflict detection and warnings
-- Batch processing capabilities
-- Timeout handling (35s)
-
-// Classification Display
-- 🆕 New Original
-- ➕ New Stage
-- 🔄 Duplicates
-- ⚠️ Invalid Suffix
-- 🔗 Orphan Stage
-```
-
-#### Performance Optimizations
-
-**React Optimizations:**
-- `useMemo` for expensive calculations
-- `useCallback` for event handlers
-- `React.memo` for component memoization
-- Virtual scrolling for large media lists (future)
-
-**API Optimizations:**
-- Request deduplication
-- Response caching for static data
-- Lazy loading for media thumbnails
-- Progressive image loading
-
-**File Processing:**
-- Async file operations
-- Progress tracking for uploads
-- Thumbnail generation on upload
-- File size limits and validation
-
-### File System Structure
-
-**Media Organization:**
-```
-media/
-├── drafts/
-│   ├── post_1/
-│   │   ├── image1.jpg
-│   │   ├── image1_framed.jpg
-│   │   ├── image1_detailed.jpg
-│   │   ├── video1.mov
-│   │   ├── video1_framed.mp4
-│   │   └── thumbnails/
-│   │       ├── image1_thumb.jpg
-│   │       └── video1_thumb.jpg
-│   └── post_2/
-└── uploads/ (temporary)
-```
-
-**File Naming Convention:**
-- **Original**: `{filename}.{ext}`
-- **Framed**: `{filename}_framed.{ext}`
-- **Detailed**: `{filename}_detailed.{ext}`
-- **Thumbnails**: `{filename}_thumb.jpg`
-
-### Error Handling & Security
-
-**Backend Error Handling:**
-```python
-# Custom Exceptions
-class ValidationError(Exception): pass
-class FileNotFoundError(Exception): pass
-class InvalidFileTypeError(Exception): pass
-
-# Error Responses
-400: Bad Request (validation errors)
-404: Not Found (post/media not found)
-422: Unprocessable Entity (file validation)
-500: Internal Server Error
-```
-
-**Security Measures:**
-- File type validation (whitelist approach)
-- Path traversal prevention
-- File size limits
-- Sanitized filenames
-- SQL injection prevention (SQLAlchemy ORM)
-
----
-
 ## 📋 Future Milestones
 
-### �️ Milestone 2: Post Collection Types & Phases
+### 🎯 Milestone 3: Collection Types & Phases
 - [ ] Collection type system (e.g., fetishes → collections)
 - [ ] 5-phase progression system per collection
 - [ ] Collection management interface
@@ -517,7 +335,7 @@ class InvalidFileTypeError(Exception): pass
 - [ ] Time-based phase advancement
 - [ ] Collection analytics and progress tracking
 
-### �🗓️ Milestone 3: Scheduling
+### 📅 Milestone 4: Scheduling System
 - [ ] Post scheduling system
 - [ ] Calendar interface
 - [ ] Time zone support
@@ -526,7 +344,7 @@ class InvalidFileTypeError(Exception): pass
 - [ ] Collection-aware scheduling
 - [ ] Phase-based content planning
 
-### 🌐 Milestone 4: Multi-platform Integration
+### 🌐 Milestone 5: Multi-Platform Integration
 - [ ] Social media platform APIs
 - [ ] Platform-specific formatting
 - [ ] OAuth authentication
@@ -535,7 +353,7 @@ class InvalidFileTypeError(Exception): pass
 - [ ] Collection-specific platform strategies
 - [ ] Phase-based content adaptation
 
-### 📊 Milestone 5: Analytics & Performance Tracking
+### 📊 Milestone 6: Analytics & Performance Tracking
 - [ ] Engagement metrics
 - [ ] Performance dashboard
 - [ ] A/B testing
@@ -544,7 +362,7 @@ class InvalidFileTypeError(Exception): pass
 - [ ] Collection performance analysis
 - [ ] Phase progression analytics
 
-### 🚀 Milestone 6: Advanced Features & Production Deployment
+### 🚀 Milestone 7: Advanced Features & Production Deployment
 - [ ] User authentication
 - [ ] Team collaboration
 - [ ] Advanced workflows
@@ -552,6 +370,47 @@ class InvalidFileTypeError(Exception): pass
 - [ ] Monitoring & logging
 - [ ] Collection management tools
 - [ ] Advanced phase automation
+
+---
+
+## 🎉 Recent Achievements & Current Status
+
+### ✅ Completed Features (March 2026)
+
+#### **Milestone 2: Post-Centric Workflow**
+- **File Classification**: Detects files with invalid stage suffixes (v1, v2, copy, etc.)
+- **Visual UI**: Red borders, "INVALID" badges, and hover effects
+- **Import Workflow**: One-click import to convert invalid files to valid stages
+- **Real-time Sync**: Automatic filesystem monitoring every 10 seconds
+- **Enhanced UX**: Full-card hover effects, smooth animations, consistent tooltips
+
+#### **Filesystem Synchronization**
+- **Deletion Detection**: Automatically removes database records for deleted files
+- **Auto-processing**: Handles filesystem changes without manual intervention
+- **Stage Management**: Clear incorrect stage assignments via API
+- **Robust Error Handling**: Graceful fallbacks and user feedback
+
+### 🔄 Current Work: Milestone 1 - Media Vault Foundation
+
+#### **In Progress:**
+- **Database Models**: MediaVault, MediaVersion, and Tag system models created
+- **API Endpoints**: MediaVault and Tags API routes implemented
+- **File Processing**: Hash-based naming and PNG→JPG conversion pipeline
+- **Frontend Components**: Planning MediaVaultGallery and management interfaces
+
+#### **Next Steps:**
+- Complete frontend MediaVaultGallery component
+- Implement version comparison tool
+- Add tag management interface
+- Migrate existing media data to new system
+- Test integration with post system
+
+### 📊 System Metrics
+- **File Classification**: 3 types (original, promoted, invalid)
+- **Valid Stages**: original, framed, detailed
+- **Invalid Suffixes**: 10+ patterns detected automatically
+- **Sync Frequency**: Every 10 seconds (configurable)
+- **UI Responsiveness**: <200ms animations and transitions
 
 ---
 
@@ -604,10 +463,16 @@ app/
 ├── api/
 │   ├── posts.py              # Post CRUD endpoints
 │   ├── media.py              # Media upload/management
-│   └── file_detection.py     # File scanning endpoints
+│   ├── file_detection.py     # File scanning endpoints
+│   ├── media_vault.py        # Media Vault endpoints (NEW)
+│   └── tags.py               # Tag management endpoints (NEW)
 ├── models/
 │   ├── post.py               # Post model
-│   └── media.py              # MediaFile model
+│   ├── media.py              # MediaFile model
+│   ├── media_vault.py        # MediaVault model (NEW)
+│   ├── media_version.py      # MediaVersion model (NEW)
+│   ├── tags.py               # Tag models (NEW)
+│   └── associations.py       # Association tables (NEW)
 ├── services/
 │   └── file_detection.py     # File classification logic
 ├── core/
@@ -624,74 +489,23 @@ src/
 │   ├── MediaGallery.tsx      # Horizontal carousel
 │   ├── PostDetailModal.tsx   # Post editing modal
 │   ├── FileDetection.tsx     # File scanning UI
-│   └── MediaUpload.tsx       # File upload
+│   ├── MediaUpload.tsx       # File upload
+│   ├── MediaVaultGallery.tsx  # NEW: Main media vault interface
+│   ├── MediaManagementModal.tsx # NEW: Version management
+│   ├── MediaComparer.tsx      # NEW: Version comparison
+│   └── TagManagement.tsx      # NEW: Tag management interface
 ├── services/
 │   ├── api.ts                # Axios setup
-│   └── fileDetectionService.ts
+│   ├── fileDetectionService.ts
+│   ├── mediaVaultService.ts  # NEW: Media Vault API
+│   └── tagService.ts         # NEW: Tag API
 ├── hooks/
 │   └── useApi.ts             # API hooks
 └── types/
-    └── post.ts               # TypeScript types
+    ├── post.ts               # TypeScript types
+    ├── mediaVault.ts         # NEW: Media Vault types
+    └── tags.ts               # NEW: Tag types
 ```
-
----
-
-## 🎉 Recent Achievements & Current Status
-
-### ✅ Completed Features (March 2026)
-
-#### **Invalid File Handling System**
-- **File Classification**: Detects files with invalid stage suffixes (v1, v2, copy, etc.)
-- **Visual UI**: Red borders, "INVALID" badges, and hover effects
-- **Import Workflow**: One-click import to convert invalid files to valid stages
-- **Real-time Sync**: Automatic filesystem monitoring every 10 seconds
-- **Enhanced UX**: Full-card hover effects, smooth animations, consistent tooltips
-
-#### **Filesystem Synchronization**
-- **Deletion Detection**: Automatically removes database records for deleted files
-- **Auto-processing**: Handles filesystem changes without manual intervention
-- **Stage Management**: Clear incorrect stage assignments via API
-- **Robust Error Handling**: Graceful fallbacks and user feedback
-
-#### **API Enhancements**
-- **Import Endpoint**: `/posts/{id}/import-invalid` for file renaming
-- **Stage Clearing**: `/posts/{id}/clear-stage` for corrections
-- **Enhanced Scanning**: Better file classification and conflict detection
-- **Real-time Updates**: Automatic frontend refresh on changes
-
-### 📊 System Metrics
-- **File Classification**: 3 types (original, promoted, invalid)
-- **Valid Stages**: original, framed, detailed
-- **Invalid Suffixes**: 10+ patterns detected automatically
-- **Sync Frequency**: Every 10 seconds (configurable)
-- **UI Responsiveness**: <200ms animations and transitions
-
-### 🔄 Current Workflow
-
-### User Flow:
-1. **Create Post** → New post in draft stage
-2. **Upload Media** → Files uploaded to `media/drafts/post_{id}/`
-3. **Auto-Detect** → Files automatically scanned and classified every 10 seconds
-4. **Review Results** → See classification (new, duplicates, invalid) with visual indicators
-5. **Handle Invalid Files** → Hover over red-bordered files and click "📥 Import"
-6. **Process Files** → System automatically processes valid files and imports
-7. **Filter by Stage** → Use Original/Framed/Detailed buttons with invalid file counts
-8. **View Media** → Horizontal carousel with smooth animations and import buttons
-9. **Update Post Stage** → Use dropdown to change post workflow stage
-
-### Enhanced Features:
-- **Automatic Sync**: No need for manual scanning - system detects changes automatically
-- **Invalid File Import**: One-click conversion of invalid files to valid stages
-- **Visual Feedback**: Red borders, hover effects, and smooth transitions
-- **Real-time Updates**: Frontend refreshes automatically when files change
-- **Consistent UX**: Same behavior across all file types with proper tooltips
-
-### Alternative Flow (External Processing):
-1. User drops files directly into post directory
-2. Files automatically detected and classified within 10 seconds
-3. Invalid files appear with red borders for import
-4. System auto-processes valid files and syncs database
-5. User can import invalid files via hover and click interface
 
 ---
 
@@ -712,9 +526,12 @@ src/
 - ✅ Missing tooltips on invalid files (March 2026)
 - ✅ Inconsistent cursor behavior on filenames (March 2026)
 - ✅ Import button only visible on small hover area (March 2026)
+- ✅ Stage display issue caused by database constraints (March 2026)
 
 ### Current:
-- ✅ File detection system fully implemented and functional (March 2026)
+- 🔄 Media Vault system implementation in progress (March 2026)
+- 🔄 Database schema migration from MediaFile to MediaVault
+- 🔄 Frontend components for Media Vault interface
 
 ---
 
@@ -725,9 +542,13 @@ src/
 - System supports both upload and external file workflows
 - Timeout protection prevents hanging on large directories
 - All changes are atomic - either all succeed or none applied
+- **NEW**: Media Vault becomes the core system with posts as consumers
+- **NEW**: Hash-based file naming prevents conflicts
+- **NEW**: Multi-category tagging system for enhanced organization
 
 ---
 
-**Last Updated**: March 13, 2026
+**Last Updated**: March 15, 2026
 **Status**: Active Development
-**Milestone 1**: Complete ✅
+**Milestone 1**: Media Vault Foundation (In Progress 🔄)
+**Milestone 2**: Post-Centric Workflow (Complete ✅)
