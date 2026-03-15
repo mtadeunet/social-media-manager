@@ -5,7 +5,7 @@ from .file_detection import router as file_detection_router
 from .media_vault import router as media_vault_router
 from .tags import router as tags_router
 
-api_router = APIRouter()
+api_router = APIRouter(prefix="/api")
 api_router.include_router(posts_router)
 api_router.include_router(media_router)
 api_router.include_router(file_detection_router)

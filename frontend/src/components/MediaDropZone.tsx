@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { mediaVaultService } from '../services/mediaVaultService';
 import { EnhancementTag } from '../types/mediaVault';
 
@@ -68,11 +68,11 @@ const MediaDropZone: React.FC<MediaDropZoneProps> = ({ enhancementTags, onUpload
       // Update to processing status
       setUploadingFiles(prev => {
         const updated = [...prev];
-        updated[index] = { 
-          ...updated[index], 
-          status: 'processing', 
+        updated[index] = {
+          ...updated[index],
+          status: 'processing',
           progress: 95,
-          mediaId: response.id 
+          mediaId: response.id
         };
         return updated;
       });
@@ -87,9 +87,9 @@ const MediaDropZone: React.FC<MediaDropZoneProps> = ({ enhancementTags, onUpload
       // Update to complete status with thumbnail
       setUploadingFiles(prev => {
         const updated = [...prev];
-        updated[index] = { 
-          ...updated[index], 
-          status: 'complete', 
+        updated[index] = {
+          ...updated[index],
+          status: 'complete',
           progress: 100,
           thumbnailUrl: thumbnailPath ? `http://localhost:8000/${thumbnailPath}` : undefined
         };
@@ -100,9 +100,9 @@ const MediaDropZone: React.FC<MediaDropZoneProps> = ({ enhancementTags, onUpload
       console.error('Upload failed:', error);
       setUploadingFiles(prev => {
         const updated = [...prev];
-        updated[index] = { 
-          ...updated[index], 
-          status: 'error', 
+        updated[index] = {
+          ...updated[index],
+          status: 'error',
           progress: 0,
           error: error instanceof Error ? error.message : 'Upload failed'
         };
@@ -116,7 +116,7 @@ const MediaDropZone: React.FC<MediaDropZoneProps> = ({ enhancementTags, onUpload
     e.stopPropagation();
     setIsDragging(false);
 
-    const files = Array.from(e.dataTransfer.files).filter(file => 
+    const files = Array.from(e.dataTransfer.files).filter(file =>
       file.type.startsWith('image/') || file.type.startsWith('video/')
     );
 
@@ -144,7 +144,7 @@ const MediaDropZone: React.FC<MediaDropZoneProps> = ({ enhancementTags, onUpload
   }, [selectedTags, onUploadComplete]);
 
   const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []).filter(file => 
+    const files = Array.from(e.target.files || []).filter(file =>
       file.type.startsWith('image/') || file.type.startsWith('video/')
     );
 
@@ -196,11 +196,10 @@ const MediaDropZone: React.FC<MediaDropZoneProps> = ({ enhancementTags, onUpload
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        className={`relative border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-          isDragging
-            ? 'border-blue-500 bg-blue-50'
-            : 'border-gray-300 hover:border-gray-400'
-        }`}
+        className={`relative border-2 border-dashed rounded-2xl p-8 text-center transition-all duration-300 ${isDragging
+            ? 'border-purple-500 bg-gradient-to-br from-purple-100/50 to-pink-100/50 backdrop-blur-xl scale-105'
+            : 'border-purple-300/50 hover:border-purple-400/70 backdrop-blur-xl bg-white/30'
+          }`}
       >
         <input
           type="file"
@@ -209,13 +208,13 @@ const MediaDropZone: React.FC<MediaDropZoneProps> = ({ enhancementTags, onUpload
           onChange={handleFileSelect}
           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
         />
-        
+
         <div className="pointer-events-none">
-          <div className="text-6xl mb-4">📁</div>
-          <p className="text-lg font-medium text-gray-700 mb-2">
+          <div className="text-7xl mb-4 animate-bounce">📁</div>
+          <p className="text-xl font-semibold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent mb-2">
             Drop media files here or click to browse
           </p>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-gray-600 font-medium">
             Supports images and videos
           </p>
         </div>
@@ -224,7 +223,7 @@ const MediaDropZone: React.FC<MediaDropZoneProps> = ({ enhancementTags, onUpload
       {/* Enhancement Tags Selection */}
       {enhancementTags.length > 0 && (
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-gray-700 mb-3">
             Enhancement Tags (Optional)
           </label>
           <div className="flex flex-wrap gap-2">
@@ -232,11 +231,10 @@ const MediaDropZone: React.FC<MediaDropZoneProps> = ({ enhancementTags, onUpload
               <button
                 key={tag.id}
                 onClick={() => toggleTag(tag.id)}
-                className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
-                  selectedTags.includes(tag.id)
-                    ? 'text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
+                className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-300 border ${selectedTags.includes(tag.id)
+                    ? 'text-white shadow-lg scale-105 border-white/50'
+                    : 'backdrop-blur-xl bg-white/60 text-gray-700 hover:bg-white/80 border-white/50 hover:scale-105'
+                  }`}
                 style={{
                   backgroundColor: selectedTags.includes(tag.id) ? tag.color : undefined
                 }}
@@ -250,13 +248,13 @@ const MediaDropZone: React.FC<MediaDropZoneProps> = ({ enhancementTags, onUpload
 
       {/* Overall Progress */}
       {uploadingFiles.length > 0 && (
-        <div className="bg-white rounded-lg shadow-sm p-4">
-          <div className="flex items-center justify-between mb-2">
+        <div className="backdrop-blur-xl bg-white/40 border border-white/50 rounded-2xl shadow-xl p-5">
+          <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-4">
-              <span className="text-sm font-medium text-gray-700">
+              <span className="text-sm font-semibold text-gray-800">
                 Overall Progress
               </span>
-              <span className="text-sm text-gray-500">
+              <span className="text-sm text-gray-600 font-medium">
                 {completedCount}/{uploadingFiles.length} complete
                 {errorCount > 0 && ` • ${errorCount} failed`}
               </span>
@@ -264,16 +262,16 @@ const MediaDropZone: React.FC<MediaDropZoneProps> = ({ enhancementTags, onUpload
             {completedCount > 0 && (
               <button
                 onClick={clearCompleted}
-                className="text-sm text-blue-600 hover:text-blue-700"
+                className="text-sm text-purple-600 hover:text-purple-700 font-semibold backdrop-blur-xl bg-white/60 px-3 py-1.5 rounded-lg hover:bg-white/80 transition-all"
               >
                 Clear completed
               </button>
             )}
           </div>
-          
-          <div className="w-full bg-gray-200 rounded-full h-2">
+
+          <div className="w-full bg-gradient-to-r from-purple-200/50 to-pink-200/50 rounded-full h-3 overflow-hidden">
             <div
-              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+              className="bg-gradient-to-r from-purple-600 to-pink-600 h-3 rounded-full transition-all duration-500 shadow-lg"
               style={{ width: `${overallProgress}%` }}
             />
           </div>
@@ -286,10 +284,10 @@ const MediaDropZone: React.FC<MediaDropZoneProps> = ({ enhancementTags, onUpload
           {uploadingFiles.map((uploadFile, index) => (
             <div
               key={index}
-              className="bg-white rounded-lg shadow-sm p-4 flex items-center gap-4"
+              className="backdrop-blur-xl bg-white/40 border border-white/50 rounded-2xl shadow-lg p-4 flex items-center gap-4 hover:bg-white/60 transition-all duration-300"
             >
               {/* Thumbnail Preview */}
-              <div className="w-16 h-16 flex-shrink-0 bg-gray-100 rounded overflow-hidden">
+              <div className="w-16 h-16 flex-shrink-0 bg-gradient-to-br from-purple-100/50 to-pink-100/50 rounded-xl overflow-hidden border border-white/50">
                 {uploadFile.thumbnailUrl ? (
                   <img
                     src={uploadFile.thumbnailUrl}
@@ -327,9 +325,9 @@ const MediaDropZone: React.FC<MediaDropZoneProps> = ({ enhancementTags, onUpload
 
                 {/* Progress Bar */}
                 {uploadFile.status !== 'complete' && uploadFile.status !== 'error' && (
-                  <div className="w-full bg-gray-200 rounded-full h-1.5">
+                  <div className="w-full bg-gradient-to-r from-purple-200/50 to-pink-200/50 rounded-full h-2 overflow-hidden">
                     <div
-                      className="bg-blue-600 h-1.5 rounded-full transition-all duration-300"
+                      className="bg-gradient-to-r from-purple-600 to-pink-600 h-2 rounded-full transition-all duration-300"
                       style={{ width: `${uploadFile.progress}%` }}
                     />
                   </div>
