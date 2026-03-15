@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { mediaVaultService } from '../services/mediaVaultService';
-import { MediaVault, EnhancementTag, StyleTag, PlatformTag } from '../types/mediaVault';
+import { EnhancementTag, MediaVault, PlatformTag, StyleTag } from '../types/mediaVault';
+import MediaDropZone from './MediaDropZone';
 
 interface MediaVaultGalleryProps {
   onMediaSelect?: (media: MediaVault) => void;
@@ -11,14 +12,11 @@ const MediaVaultGallery: React.FC<MediaVaultGalleryProps> = ({ onMediaSelect }) 
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showUsableOnly, setShowUsableOnly] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [uploading, setUploading] = useState(false);
-  
+
   // Tags state
   const [enhancementTags, setEnhancementTags] = useState<EnhancementTag[]>([]);
   const [styleTags, setStyleTags] = useState<StyleTag[]>([]);
   const [platformTags, setPlatformTags] = useState<PlatformTag[]>([]);
-  const [selectedEnhancementTags, setSelectedEnhancementTags] = useState<number[]>([]);
 
   useEffect(() => {
     loadMedia();
@@ -52,29 +50,6 @@ const MediaVaultGallery: React.FC<MediaVaultGalleryProps> = ({ onMediaSelect }) 
     }
   };
 
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files && event.target.files[0]) {
-      setSelectedFile(event.target.files[0]);
-    }
-  };
-
-  const handleUpload = async () => {
-    if (!selectedFile) return;
-
-    try {
-      setUploading(true);
-      await mediaVaultService.uploadMedia(selectedFile, selectedEnhancementTags);
-      setSelectedFile(null);
-      setSelectedEnhancementTags([]);
-      await loadMedia();
-    } catch (error) {
-      console.error('Failed to upload media:', error);
-      alert('Failed to upload media');
-    } finally {
-      setUploading(false);
-    }
-  };
-
   const handleToggleUsability = async (mediaId: number) => {
     try {
       await mediaVaultService.toggleUsability(mediaId);
@@ -96,12 +71,6 @@ const MediaVaultGallery: React.FC<MediaVaultGalleryProps> = ({ onMediaSelect }) 
     }
   };
 
-  const toggleEnhancementTag = (tagId: number) => {
-    setSelectedEnhancementTags(prev =>
-      prev.includes(tagId) ? prev.filter(id => id !== tagId) : [...prev, tagId]
-    );
-  };
-
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
       <div className="max-w-7xl mx-auto">
@@ -114,50 +83,10 @@ const MediaVaultGallery: React.FC<MediaVaultGalleryProps> = ({ onMediaSelect }) 
         {/* Upload Section */}
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
           <h2 className="text-xl font-semibold mb-4">Upload New Media</h2>
-          <div className="space-y-4">
-            <div>
-              <input
-                type="file"
-                accept="image/*,video/*"
-                onChange={handleFileSelect}
-                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-              />
-            </div>
-
-            {selectedFile && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Enhancement Tags (Optional)
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  {enhancementTags.map(tag => (
-                    <button
-                      key={tag.id}
-                      onClick={() => toggleEnhancementTag(tag.id)}
-                      className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
-                        selectedEnhancementTags.includes(tag.id)
-                          ? 'text-white'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                      style={{
-                        backgroundColor: selectedEnhancementTags.includes(tag.id) ? tag.color : undefined
-                      }}
-                    >
-                      {tag.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <button
-              onClick={handleUpload}
-              disabled={!selectedFile || uploading}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
-            >
-              {uploading ? 'Uploading...' : 'Upload Media'}
-            </button>
-          </div>
+          <MediaDropZone
+            enhancementTags={enhancementTags}
+            onUploadComplete={loadMedia}
+          />
         </div>
 
         {/* Filters */}
@@ -219,7 +148,7 @@ const MediaVaultGallery: React.FC<MediaVaultGalleryProps> = ({ onMediaSelect }) 
                       <span className="text-4xl">📁</span>
                     </div>
                   )}
-                  
+
                   {/* Usability Badge */}
                   <div className="absolute top-2 right-2">
                     <button
@@ -227,11 +156,10 @@ const MediaVaultGallery: React.FC<MediaVaultGalleryProps> = ({ onMediaSelect }) 
                         e.stopPropagation();
                         handleToggleUsability(media.id);
                       }}
-                      className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        media.is_usable
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-gray-100 text-gray-600'
-                      }`}
+                      className={`px-2 py-1 rounded-full text-xs font-medium ${media.is_usable
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-gray-100 text-gray-600'
+                        }`}
                     >
                       {media.is_usable ? '✓ Usable' : 'Not Usable'}
                     </button>
@@ -247,7 +175,7 @@ const MediaVaultGallery: React.FC<MediaVaultGalleryProps> = ({ onMediaSelect }) 
                     <span>{media.file_type}</span>
                     <span>{media.version_count || 0} versions</span>
                   </div>
-                  
+
                   {/* Actions */}
                   <div className="mt-3 flex gap-2">
                     <button
