@@ -196,9 +196,9 @@ const MediaDropZone: React.FC<MediaDropZoneProps> = ({ enhancementTags, onUpload
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        className={`relative border-2 border-dashed rounded-2xl p-8 text-center transition-all duration-300 ${isDragging
-            ? 'border-purple-500 bg-gradient-to-br from-purple-100/50 to-pink-100/50 backdrop-blur-xl scale-105'
-            : 'border-purple-300/50 hover:border-purple-400/70 backdrop-blur-xl bg-white/30'
+        className={`relative border-2 border-dashed rounded-3xl p-12 text-center transition-all duration-500 ${isDragging
+            ? 'border-cyan-500 bg-gradient-to-br from-cyan-500/20 to-purple-500/20 backdrop-blur-2xl scale-105 shadow-2xl shadow-cyan-500/50'
+            : 'border-purple-500/30 hover:border-purple-500/60 backdrop-blur-2xl bg-slate-900/30 hover:bg-slate-900/50'
           }`}
       >
         <input
@@ -210,11 +210,11 @@ const MediaDropZone: React.FC<MediaDropZoneProps> = ({ enhancementTags, onUpload
         />
 
         <div className="pointer-events-none">
-          <div className="text-7xl mb-4 animate-bounce">📁</div>
-          <p className="text-xl font-semibold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent mb-2">
+          <div className="text-8xl mb-6 animate-pulse">📁</div>
+          <p className="text-2xl font-black bg-gradient-to-r from-cyan-400 via-purple-400 to-pink-400 bg-clip-text text-transparent mb-3 uppercase tracking-wider">
             Drop media files here or click to browse
           </p>
-          <p className="text-sm text-gray-600 font-medium">
+          <p className="text-base text-gray-400 font-semibold uppercase tracking-widest">
             Supports images and videos
           </p>
         </div>
@@ -223,20 +223,21 @@ const MediaDropZone: React.FC<MediaDropZoneProps> = ({ enhancementTags, onUpload
       {/* Enhancement Tags Selection */}
       {enhancementTags.length > 0 && (
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-3">
+          <label className="block text-sm font-bold text-cyan-400 mb-4 uppercase tracking-widest">
             Enhancement Tags (Optional)
           </label>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-3">
             {enhancementTags.map(tag => (
               <button
                 key={tag.id}
                 onClick={() => toggleTag(tag.id)}
-                className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-300 border ${selectedTags.includes(tag.id)
-                    ? 'text-white shadow-lg scale-105 border-white/50'
-                    : 'backdrop-blur-xl bg-white/60 text-gray-700 hover:bg-white/80 border-white/50 hover:scale-105'
+                className={`px-5 py-2.5 rounded-2xl text-sm font-bold transition-all duration-300 border-2 uppercase tracking-wider ${selectedTags.includes(tag.id)
+                    ? 'text-white shadow-2xl scale-110 border-white/50'
+                    : 'backdrop-blur-xl bg-slate-900/50 text-gray-300 hover:bg-slate-800/70 border-purple-500/30 hover:border-purple-500/60 hover:scale-105'
                   }`}
                 style={{
-                  backgroundColor: selectedTags.includes(tag.id) ? tag.color : undefined
+                  backgroundColor: selectedTags.includes(tag.id) ? tag.color : undefined,
+                  boxShadow: selectedTags.includes(tag.id) ? `0 0 20px ${tag.color}50` : undefined
                 }}
               >
                 {tag.name}
@@ -248,13 +249,13 @@ const MediaDropZone: React.FC<MediaDropZoneProps> = ({ enhancementTags, onUpload
 
       {/* Overall Progress */}
       {uploadingFiles.length > 0 && (
-        <div className="backdrop-blur-xl bg-white/40 border border-white/50 rounded-2xl shadow-xl p-5">
-          <div className="flex items-center justify-between mb-3">
+        <div className="backdrop-blur-2xl bg-slate-800/50 border border-cyan-500/30 rounded-3xl shadow-2xl p-6">
+          <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-4">
-              <span className="text-sm font-semibold text-gray-800">
+              <span className="text-base font-black text-cyan-400 uppercase tracking-wider">
                 Overall Progress
               </span>
-              <span className="text-sm text-gray-600 font-medium">
+              <span className="text-sm text-purple-400 font-bold">
                 {completedCount}/{uploadingFiles.length} complete
                 {errorCount > 0 && ` • ${errorCount} failed`}
               </span>
@@ -262,16 +263,16 @@ const MediaDropZone: React.FC<MediaDropZoneProps> = ({ enhancementTags, onUpload
             {completedCount > 0 && (
               <button
                 onClick={clearCompleted}
-                className="text-sm text-purple-600 hover:text-purple-700 font-semibold backdrop-blur-xl bg-white/60 px-3 py-1.5 rounded-lg hover:bg-white/80 transition-all"
+                className="text-sm text-cyan-400 hover:text-cyan-300 font-bold backdrop-blur-xl bg-slate-900/50 px-4 py-2 rounded-2xl hover:bg-slate-900/70 border border-cyan-500/30 hover:border-cyan-500/50 transition-all uppercase tracking-wider"
               >
                 Clear completed
               </button>
             )}
           </div>
 
-          <div className="w-full bg-gradient-to-r from-purple-200/50 to-pink-200/50 rounded-full h-3 overflow-hidden">
+          <div className="w-full bg-slate-900/50 rounded-full h-4 overflow-hidden border border-purple-500/20">
             <div
-              className="bg-gradient-to-r from-purple-600 to-pink-600 h-3 rounded-full transition-all duration-500 shadow-lg"
+              className="bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500 h-4 rounded-full transition-all duration-500 shadow-lg shadow-purple-500/50"
               style={{ width: `${overallProgress}%` }}
             />
           </div>
@@ -280,14 +281,14 @@ const MediaDropZone: React.FC<MediaDropZoneProps> = ({ enhancementTags, onUpload
 
       {/* Individual File Progress */}
       {uploadingFiles.length > 0 && (
-        <div className="space-y-3">
+        <div className="space-y-4">
           {uploadingFiles.map((uploadFile, index) => (
             <div
               key={index}
-              className="backdrop-blur-xl bg-white/40 border border-white/50 rounded-2xl shadow-lg p-4 flex items-center gap-4 hover:bg-white/60 transition-all duration-300"
+              className="backdrop-blur-2xl bg-slate-800/40 border border-purple-500/20 rounded-3xl shadow-xl p-5 flex items-center gap-5 hover:bg-slate-800/60 hover:border-purple-500/40 transition-all duration-500"
             >
               {/* Thumbnail Preview */}
-              <div className="w-16 h-16 flex-shrink-0 bg-gradient-to-br from-purple-100/50 to-pink-100/50 rounded-xl overflow-hidden border border-white/50">
+              <div className="w-20 h-20 flex-shrink-0 bg-gradient-to-br from-slate-900 via-purple-900/30 to-slate-900 rounded-2xl overflow-hidden border-2 border-purple-500/30">
                 {uploadFile.thumbnailUrl ? (
                   <img
                     src={uploadFile.thumbnailUrl}
@@ -311,13 +312,17 @@ const MediaDropZone: React.FC<MediaDropZoneProps> = ({ enhancementTags, onUpload
 
               {/* File Info and Progress */}
               <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between mb-1">
-                  <p className="text-sm font-medium text-gray-900 truncate">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-bold text-white truncate">
                     {uploadFile.file.name}
                   </p>
-                  <span className="text-sm text-gray-500 ml-2">
-                    {uploadFile.status === 'uploading' && 'Uploading...'}
-                    {uploadFile.status === 'processing' && 'Processing...'}
+                  <span className={`text-xs font-bold ml-3 px-3 py-1 rounded-xl uppercase tracking-wider ${uploadFile.status === 'uploading' ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' :
+                      uploadFile.status === 'processing' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' :
+                        uploadFile.status === 'complete' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+                          'bg-red-500/20 text-red-400 border border-red-500/30'
+                    }`}>
+                    {uploadFile.status === 'uploading' && '⬆️ Uploading'}
+                    {uploadFile.status === 'processing' && '⚙️ Processing'}
                     {uploadFile.status === 'complete' && '✓ Complete'}
                     {uploadFile.status === 'error' && '✗ Failed'}
                   </span>
@@ -325,9 +330,9 @@ const MediaDropZone: React.FC<MediaDropZoneProps> = ({ enhancementTags, onUpload
 
                 {/* Progress Bar */}
                 {uploadFile.status !== 'complete' && uploadFile.status !== 'error' && (
-                  <div className="w-full bg-gradient-to-r from-purple-200/50 to-pink-200/50 rounded-full h-2 overflow-hidden">
+                  <div className="w-full bg-slate-900/50 rounded-full h-2.5 overflow-hidden border border-purple-500/20">
                     <div
-                      className="bg-gradient-to-r from-purple-600 to-pink-600 h-2 rounded-full transition-all duration-300"
+                      className="bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500 h-2.5 rounded-full transition-all duration-300 shadow-lg shadow-purple-500/50"
                       style={{ width: `${uploadFile.progress}%` }}
                     />
                   </div>
@@ -335,11 +340,11 @@ const MediaDropZone: React.FC<MediaDropZoneProps> = ({ enhancementTags, onUpload
 
                 {/* Error Message */}
                 {uploadFile.status === 'error' && uploadFile.error && (
-                  <p className="text-xs text-red-600 mt-1">{uploadFile.error}</p>
+                  <p className="text-xs text-red-400 mt-2 font-semibold">{uploadFile.error}</p>
                 )}
 
                 {/* File Size */}
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-gray-500 mt-2 font-semibold">
                   {(uploadFile.file.size / 1024 / 1024).toFixed(2)} MB
                 </p>
               </div>
