@@ -12,6 +12,19 @@ const MediaVaultGallery: React.FC<MediaVaultGalleryProps> = ({ onMediaSelect }) 
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showUsableOnly, setShowUsableOnly] = useState(false);
+  const [backendConnected, setBackendConnected] = useState(false);
+
+  // Selection state
+  const [selectedMediaIds, setSelectedMediaIds] = useState<Set<number>>(new Set());
+  const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
+  const [isSelecting, setIsSelecting] = useState(false);
+  const [selectionBox, setSelectionBox] = useState({ x: 0, y: 0, width: 0, height: 0 });
+
+
+  // Upload filter state
+  const [uploadFilter, setUploadFilter] = useState<'none' | 'last-session' | 'time-range'>('none');
+  const [timeRangeFilter, setTimeRangeFilter] = useState({ value: 10, unit: 'minutes' as const });
+  const [lastUploadSession, setLastUploadSession] = useState<{ timestamp: number; fileIds: number[] } | null>(null);
 
   // Tags state
   const [enhancementTags, setEnhancementTags] = useState<EnhancementTag[]>([]);
@@ -21,15 +34,48 @@ const MediaVaultGallery: React.FC<MediaVaultGalleryProps> = ({ onMediaSelect }) 
   useEffect(() => {
     loadMedia();
     loadTags();
-  }, [searchTerm, showUsableOnly]);
+  }, [searchTerm, showUsableOnly, uploadFilter, timeRangeFilter]);
+
+  // Periodic connection check
+  useEffect(() => {
+    const interval = setInterval(checkBackendConnection, 5000); // Check every 5 seconds
+    return () => clearInterval(interval);
+  }, []);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === 'a') {
+        event.preventDefault();
+        handleSelectAll();
+      } else if (event.key === 'Escape') {
+        handleClearSelection();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [mediaItems]);
+
+  const checkBackendConnection = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/');
+      setBackendConnected(response.ok);
+    } catch (error) {
+      setBackendConnected(false);
+    }
+  };
 
   const loadMedia = async () => {
     try {
       setLoading(true);
-      const response = await mediaVaultService.listMedia(0, 50, searchTerm, showUsableOnly);
+      await checkBackendConnection();
+      const response = await mediaVaultService.listMedia(0, 50);
       setMediaItems(response.media);
     } catch (error) {
       console.error('Failed to load media:', error);
+      setMediaItems([]);
+      setBackendConnected(false);
     } finally {
       setLoading(false);
     }
@@ -71,129 +117,301 @@ const MediaVaultGallery: React.FC<MediaVaultGalleryProps> = ({ onMediaSelect }) 
     }
   };
 
+  // Selection handlers
+  const handleMediaClick = (mediaId: number, index: number, event: React.MouseEvent) => {
+    event.preventDefault();
+
+    if (event.ctrlKey || event.metaKey) {
+      // Ctrl+click: Toggle selection
+      setSelectedMediaIds(prev => {
+        const newSet = new Set(prev);
+        if (newSet.has(mediaId)) {
+          newSet.delete(mediaId);
+        } else {
+          newSet.add(mediaId);
+        }
+        return newSet;
+      });
+      setLastSelectedIndex(index);
+    } else if (event.shiftKey && lastSelectedIndex !== null) {
+      // Shift+click: Select range
+      const start = Math.min(lastSelectedIndex, index);
+      const end = Math.max(lastSelectedIndex, index);
+      const rangeIds = new Set<number>();
+      for (let i = start; i <= end; i++) {
+        if (mediaItems[i]) {
+          rangeIds.add(mediaItems[i].id);
+        }
+      }
+      setSelectedMediaIds(rangeIds);
+    } else {
+      // Normal click: Select only this item
+      setSelectedMediaIds(new Set([mediaId]));
+      setLastSelectedIndex(index);
+    }
+  };
+
+  const handleSelectAll = () => {
+    const allIds = new Set(mediaItems.map(item => item.id));
+    setSelectedMediaIds(allIds);
+  };
+
+  const handleClearSelection = () => {
+    setSelectedMediaIds(new Set());
+    setLastSelectedIndex(null);
+  };
+
+
+  const handleUploadSessionComplete = (sessionData: { timestamp: number; fileIds: number[] }) => {
+    setLastUploadSession(sessionData);
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-8">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-gray-900 p-8 relative overflow-hidden">
+      {/* Subtle animated background elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-0 left-0 w-96 h-96 bg-gray-800 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob"></div>
+        <div className="absolute top-0 right-0 w-96 h-96 bg-gray-700 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000"></div>
+        <div className="absolute bottom-0 left-1/2 w-96 h-96 bg-gray-600 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-4000"></div>
+      </div>
+
+      <div className="max-w-7xl mx-auto relative z-10">
         {/* Header */}
-        <div className="mb-10">
-          <h1 className="text-5xl font-black bg-gradient-to-r from-cyan-400 via-purple-400 to-pink-400 bg-clip-text text-transparent mb-3 tracking-tight">
-            Media Vault
-          </h1>
-          <p className="text-gray-400 text-lg">Centralized media management with intelligent version tracking</p>
+        <div className="mb-12">
+          <div className="flex items-center justify-between mb-4">
+            <h1 className="text-6xl font-bold text-white tracking-tight drop-shadow-lg">
+              Media Vault
+            </h1>
+            {/* Connection Status Indicator */}
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{
+              backgroundColor: backendConnected ? '#065f46' : '#7f1d1d',
+              border: `1px solid ${backendConnected ? '#10b981' : '#ef4444'}`
+            }}>
+              <div className={`w-2 h-2 rounded-full ${backendConnected ? 'bg-green-400' : 'bg-red-400'} ${backendConnected ? 'animate-pulse' : ''}`}></div>
+              <span className="text-sm font-medium text-white">
+                {backendConnected ? 'Backend Connected' : 'Backend Offline'}
+              </span>
+            </div>
+          </div>
+          <p className="text-white/90 text-xl drop-shadow">Centralized media management with intelligent version tracking</p>
         </div>
 
         {/* Upload Section */}
-        <div className="backdrop-blur-2xl bg-slate-800/50 border border-purple-500/20 rounded-3xl shadow-2xl p-8 mb-8 hover:border-purple-500/40 transition-all duration-500">
-          <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
-            <span className="text-3xl">⬆️</span>
-            Upload New Media
+        <div className="bg-gray-800 rounded-2xl p-8 mb-8 hover:bg-gray-750 transition-all duration-300">
+          <h2 className="text-2xl font-semibold text-white mb-6">
+            Upload Media
           </h2>
+          {!backendConnected && (
+            <div className="mb-4 p-3 bg-red-900/50 border border-red-600 rounded-lg">
+              <p className="text-red-200 text-sm">
+                ⚠️ Backend is offline. File uploads will not work until the backend connection is restored.
+              </p>
+            </div>
+          )}
           <MediaDropZone
             enhancementTags={enhancementTags}
             onUploadComplete={loadMedia}
+            onUploadSessionComplete={handleUploadSessionComplete}
           />
         </div>
 
         {/* Filters */}
-        <div className="backdrop-blur-2xl bg-slate-800/50 border border-cyan-500/20 rounded-3xl shadow-2xl p-6 mb-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-semibold text-cyan-400 mb-3 uppercase tracking-wider">Search</label>
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search by filename..."
-                className="w-full px-5 py-3.5 backdrop-blur-xl bg-slate-900/50 border border-cyan-500/30 rounded-2xl focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all placeholder-gray-500 text-white font-medium"
-              />
+        <div className="bg-gray-800 rounded-2xl p-6 mb-8">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="text-white font-medium drop-shadow">
+                Showing {mediaItems.length} file{mediaItems.length !== 1 ? 's' : ''}
+                {mediaItems.length > 0 && (
+                  <span className="ml-4">
+                    <button
+                      onClick={handleSelectAll}
+                      className="ml-2 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-md border border-blue-700 shadow-sm hover:shadow-md transition-all duration-200 font-medium"
+                    >
+                      Select All
+                    </button>
+                    {selectedMediaIds.size > 0 && (
+                      <>
+                        <span className="ml-3">• {selectedMediaIds.size} selected</span>
+                        <button
+                          onClick={() => setSelectedMediaIds(new Set())}
+                          className="ml-2 px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded-md border border-red-700 shadow-sm hover:shadow-md transition-all duration-200 font-medium"
+                        >
+                          Clear
+                        </button>
+                      </>
+                    )}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {/* Upload Filter Dropdown */}
+                <div className="relative">
+                  <select
+                    value={uploadFilter}
+                    onChange={(e) => setUploadFilter(e.target.value as any)}
+                    className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-gray-600 transition-all text-white text-sm"
+                  >
+                    <option value="none" className="bg-gray-700">All Uploads</option>
+                    <option value="last-session" className="bg-gray-700">Last Upload Session</option>
+                    <option value="time-range" className="bg-gray-700">Time Range</option>
+                  </select>
+                </div>
+
+                {/* Time Range Filter (shown when time-range is selected) */}
+                {uploadFilter === 'time-range' && (
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={timeRangeFilter.unit}
+                      onChange={(e) => setTimeRangeFilter(prev => ({ ...prev, unit: e.target.value as any }))}
+                      className="px-2 py-1 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-gray-600 transition-all text-white text-xs"
+                    >
+                      <option value="minutes" className="bg-gray-700">Minutes</option>
+                      <option value="hours" className="bg-gray-700">Hours</option>
+                      <option value="days" className="bg-gray-700">Days</option>
+                    </select>
+                    <input
+                      type="number"
+                      min="1"
+                      value={timeRangeFilter.value}
+                      onChange={(e) => setTimeRangeFilter(prev => ({ ...prev, value: parseInt(e.target.value) || 1 }))}
+                      className="w-16 px-2 py-1 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-gray-600 transition-all text-white text-xs text-center"
+                    />
+                  </div>
+                )}
+
+                {/* Clear Filters Button */}
+                {(uploadFilter !== 'none' || searchTerm || showUsableOnly) && (
+                  <button
+                    onClick={() => {
+                      setUploadFilter('none');
+                      setSearchTerm('');
+                      setShowUsableOnly(false);
+                    }}
+                    className="px-3 py-1 bg-gray-700 text-white rounded-lg hover:bg-gray-600 text-xs font-medium transition-all duration-200 border border-gray-600"
+                  >
+                    Clear Filters
+                  </button>
+                )}
+              </div>
             </div>
-            <div className="flex items-end">
-              <label className="flex items-center space-x-3 cursor-pointer px-5 py-3.5 backdrop-blur-xl bg-slate-900/50 border border-purple-500/30 rounded-2xl hover:bg-slate-900/70 hover:border-purple-500/50 transition-all w-full">
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-white mb-2 drop-shadow">Search</label>
                 <input
-                  type="checkbox"
-                  checked={showUsableOnly}
-                  onChange={(e) => setShowUsableOnly(e.target.checked)}
-                  className="w-5 h-5 text-purple-500 bg-slate-900 border-purple-500/50 rounded focus:ring-purple-500 focus:ring-offset-slate-900"
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search by filename..."
+                  className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-gray-600 transition-all placeholder-gray-400 text-white"
                 />
-                <span className="text-sm font-semibold text-purple-400 uppercase tracking-wider">Show usable only</span>
-              </label>
+              </div>
+              <div className="flex items-end">
+                <label className="flex items-center space-x-3 cursor-pointer px-4 py-3 hover:bg-gray-700/50 transition-all w-full">
+                  <input
+                    type="checkbox"
+                    checked={showUsableOnly}
+                    onChange={(e) => setShowUsableOnly(e.target.checked)}
+                    className="w-5 h-5 text-blue-600 bg-gray-600 border-gray-500 rounded focus:ring-blue-500"
+                  />
+                  <span className="text-sm font-medium text-white">Show usable only</span>
+                </label>
+              </div>
             </div>
           </div>
         </div>
 
+
         {/* Media Grid */}
         {loading ? (
           <div className="text-center py-20">
-            <div className="inline-block animate-spin rounded-full h-16 w-16 border-4 border-slate-700 border-t-cyan-500"></div>
-            <p className="mt-6 text-cyan-400 font-bold text-lg">Loading media...</p>
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-gray-600 border-t-gray-400"></div>
+            <p className="mt-4 text-white font-medium">Loading media...</p>
           </div>
         ) : mediaItems.length === 0 ? (
-          <div className="backdrop-blur-2xl bg-slate-800/50 border border-purple-500/20 rounded-3xl shadow-2xl p-16 text-center">
-            <div className="text-6xl mb-6">📦</div>
-            <p className="text-white text-2xl font-bold mb-3">No media found</p>
+          <div className="bg-gray-800 rounded-2xl p-16 text-center">
+            <div className="text-6xl mb-4">📦</div>
+            <p className="text-white text-2xl font-semibold mb-2">No media found</p>
             <p className="text-gray-400 text-lg">Upload your first media file to get started</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            {mediaItems.map(media => (
+          <div className="grid gap-4 p-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
+            {mediaItems.map((media, index) => (
               <div
                 key={media.id}
-                className="backdrop-blur-2xl bg-slate-800/40 border border-purple-500/20 rounded-3xl shadow-2xl overflow-hidden hover:shadow-purple-500/20 hover:shadow-2xl hover:scale-105 hover:border-purple-500/50 transition-all duration-500 cursor-pointer group"
-                onClick={() => onMediaSelect?.(media)}
+                className={`relative group cursor-pointer transition-all duration-200 ${selectedMediaIds.has(media.id)
+                  ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-gray-900'
+                  : ''
+                  }`}
+                onClick={(e) => handleMediaClick(media.id, index, e)}
               >
-                {/* Thumbnail */}
-                <div className="aspect-square bg-gradient-to-br from-slate-900 via-purple-900/30 to-slate-900 relative overflow-hidden">
-                  {media.latest_version?.thumbnail_path ? (
-                    <img
-                      src={`http://localhost:8000/${media.latest_version.thumbnail_path}`}
-                      alt={media.base_filename}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-gray-400">
-                      <span className="text-4xl">📁</span>
-                    </div>
-                  )}
-
-                  {/* Usability Badge */}
-                  <div className="absolute top-3 right-3">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleToggleUsability(media.id);
-                      }}
-                      className={`px-4 py-2 backdrop-blur-xl rounded-2xl text-xs font-bold border-2 transition-all duration-300 uppercase tracking-wider ${media.is_usable
-                        ? 'bg-emerald-500/90 text-white border-emerald-400 hover:bg-emerald-400 shadow-lg shadow-emerald-500/50'
-                        : 'bg-slate-700/90 text-gray-300 border-slate-600 hover:bg-slate-600 shadow-lg shadow-slate-700/50'
-                        }`}
-                    >
-                      {media.is_usable ? '✓ Usable' : 'Not Usable'}
-                    </button>
+                {/* Cell with thumbnail filling it */}
+                <div className="aspect-square bg-gray-800 rounded-lg hover:bg-gray-700 transition-colors duration-200 relative overflow-hidden">
+                  {/* Thumbnail fills the cell */}
+                  <div className="absolute inset-0 p-[10px] pb-0">
+                    {media.latest_version?.thumbnail_path ? (
+                      <img
+                        src={`http://localhost:8000/${media.latest_version.thumbnail_path}`}
+                        alt={media.base_filename}
+                        className="w-full h-full object-cover rounded"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-gray-600 bg-gray-700 rounded">
+                        <span className="text-3xl">📁</span>
+                      </div>
+                    )}
+                  </div>
+                  {/* Selection button overlaying the thumbnail */}
+                  <div
+                    className="absolute top-0 left-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                    style={{
+                      width: '32px',
+                      height: '32px',
+                      zIndex: 10,
+                      backgroundColor: selectedMediaIds.has(media.id) ? '#ef4444 !important' : '#22c55e !important',
+                      backgroundImage: 'none !important',
+                      background: selectedMediaIds.has(media.id) ? '#ef4444 !important' : '#22c55e !important',
+                      borderRadius: '4px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'white',
+                      fontSize: '18px',
+                      fontWeight: 'bold',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      border: `2px solid ${selectedMediaIds.has(media.id) ? '#ef4444' : '#22c55e'}`
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (selectedMediaIds.has(media.id)) {
+                        // Remove from selection
+                        setSelectedMediaIds(prev => {
+                          const newSet = new Set(prev);
+                          newSet.delete(media.id);
+                          return newSet;
+                        });
+                      } else {
+                        // Add to selection
+                        setSelectedMediaIds(prev => new Set(prev).add(media.id));
+                      }
+                    }}
+                  >
+                    <span style={{
+                      display: 'block',
+                      textAlign: 'center',
+                      lineHeight: '1',
+                      margin: '0',
+                      padding: '0'
+                    }}>{selectedMediaIds.has(media.id) ? '-' : '+'}</span>
                   </div>
                 </div>
 
-                {/* Info */}
-                <div className="p-5 backdrop-blur-sm bg-slate-900/40 border-t border-purple-500/10">
-                  <h3 className="font-bold text-white truncate group-hover:text-cyan-400 transition-colors text-lg" title={media.base_filename}>
+                {/* Filename */}
+                <div className="mt-1 px-1 text-center">
+                  <h3 className="text-xs text-gray-300 truncate font-medium" title={media.base_filename}>
                     {media.base_filename}
                   </h3>
-                  <div className="mt-3 flex items-center justify-between text-sm">
-                    <span className="px-3 py-1.5 backdrop-blur-xl bg-cyan-500/20 border border-cyan-500/30 rounded-xl text-xs font-bold text-cyan-400 uppercase tracking-wider">{media.file_type}</span>
-                    <span className="px-3 py-1.5 backdrop-blur-xl bg-purple-500/20 border border-purple-500/30 rounded-xl text-xs font-bold text-purple-400 uppercase tracking-wider">{media.version_count || 0} versions</span>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="mt-4 flex gap-2">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteMedia(media.id);
-                      }}
-                      className="flex-1 px-4 py-2.5 text-sm backdrop-blur-xl bg-red-500/20 text-red-400 border-2 border-red-500/30 rounded-2xl hover:bg-red-500/30 hover:border-red-500/50 font-bold transition-all duration-300 hover:scale-105 uppercase tracking-wider"
-                    >
-                      🗑️ Delete
-                    </button>
-                  </div>
                 </div>
               </div>
             ))}
