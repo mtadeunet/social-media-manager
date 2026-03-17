@@ -9,17 +9,51 @@ const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>('media-vault');
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#f8fafc' }}>
+    <div style={{ minHeight: '100vh', backgroundColor: '#111827' }}>
+      {/* Force dark theme override */}
+      <style>{`
+        * {
+          background-color: #111827 !important;
+          color: #f3f4f6 !important;
+        }
+        body {
+          background-color: #111827 !important;
+          color: #f3f4f6 !important;
+        }
+        .bg-white {
+          background-color: #1f2937 !important;
+        }
+        .text-gray-900 {
+          color: #f3f4f6 !important;
+        }
+        .text-gray-500 {
+          color: #9ca3af !important;
+        }
+        .text-gray-700 {
+          color: #d1d5db !important;
+        }
+        .border-gray-200 {
+          border-color: #374151 !important;
+        }
+        .border-white {
+          border-color: #4b5563 !important;
+        }
+        input, select, textarea {
+          background-color: #374151 !important;
+          color: #f3f4f6 !important;
+          border-color: #4b5563 !important;
+        }
+      `}</style>
       {/* Navigation */}
-      <nav className="bg-white shadow-sm border-b border-gray-200">
+      <nav className="bg-gray-800 shadow-sm border-b border-gray-700">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex space-x-8">
               <button
                 onClick={() => setCurrentView('media-vault')}
                 className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${currentView === 'media-vault'
-                    ? 'border-blue-500 text-gray-900'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'border-blue-500 text-white'
+                  : 'border-transparent text-gray-400 hover:text-white hover:border-gray-600'
                   }`}
               >
                 📁 Media Vault
@@ -27,8 +61,8 @@ const App: React.FC = () => {
               <button
                 onClick={() => setCurrentView('posts')}
                 className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${currentView === 'posts'
-                    ? 'border-blue-500 text-gray-900'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'border-blue-500 text-white'
+                  : 'border-transparent text-gray-400 hover:text-white hover:border-gray-600'
                   }`}
               >
                 📝 Posts

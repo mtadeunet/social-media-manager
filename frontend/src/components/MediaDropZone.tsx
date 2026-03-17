@@ -1,243 +1,277 @@
-import React, { useCallback, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { mediaVaultService } from '../services/mediaVaultService';
-import { EnhancementTag } from '../types/mediaVault';
-
-interface UploadingFile {
-  file: File;
-  progress: number;
-  status: 'uploading' | 'processing' | 'complete' | 'error';
-  thumbnailUrl?: string;
-  mediaId?: number;
-  error?: string;
-}
+import type { EnhancementTag } from '../types/mediaVault';
 
 interface MediaDropZoneProps {
   enhancementTags: EnhancementTag[];
   onUploadComplete: () => void;
+  onUploadSessionComplete?: (sessionData: { timestamp: number; fileIds: number[] }) => void;
 }
 
-const MediaDropZone: React.FC<MediaDropZoneProps> = ({ enhancementTags, onUploadComplete }) => {
-  const [isDragging, setIsDragging] = useState(false);
-  const [uploadingFiles, setUploadingFiles] = useState<UploadingFile[]>([]);
-  const [selectedTags, setSelectedTags] = useState<number[]>([]);
+interface MediaSlot {
+  id: string;
+  fileName: string;
+  fileSize: number;
+  fileType: string;
+  status: 'pending' | 'uploading' | 'uploaded' | 'failed';
+  progress: number;
+  thumbnail?: string;
+  error?: string;
+}
 
-  const handleDragEnter = useCallback((e: React.DragEvent) => {
+const MediaDropZone: React.FC<MediaDropZoneProps> = ({ enhancementTags, onUploadComplete, onUploadSessionComplete }) => {
+  const [isDragging, setIsDragging] = useState(false);
+  const [mediaSlots, setMediaSlots] = useState<MediaSlot[]>([]);
+  const [selectedTags, setSelectedTags] = useState<number[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(true);
-  }, []);
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.currentTarget === e.target) {
-      setIsDragging(false);
-    }
-  }, []);
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-  }, []);
-
-  const uploadFile = async (file: File, index: number) => {
-    try {
-      // Update status to uploading
-      setUploadingFiles(prev => {
-        const updated = [...prev];
-        updated[index] = { ...updated[index], status: 'uploading', progress: 0 };
-        return updated;
-      });
-
-      // Simulate upload progress (since we can't track actual upload progress easily)
-      const progressInterval = setInterval(() => {
-        setUploadingFiles(prev => {
-          const updated = [...prev];
-          if (updated[index].progress < 90) {
-            updated[index] = { ...updated[index], progress: updated[index].progress + 10 };
-          }
-          return updated;
-        });
-      }, 100);
-
-      // Upload the file
-      const response = await mediaVaultService.uploadMedia(file, selectedTags);
-
-      clearInterval(progressInterval);
-
-      // Update to processing status
-      setUploadingFiles(prev => {
-        const updated = [...prev];
-        updated[index] = {
-          ...updated[index],
-          status: 'processing',
-          progress: 95,
-          mediaId: response.id
-        };
-        return updated;
-      });
-
-      // Wait a bit for thumbnail generation
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      // Fetch the media details to get thumbnail
-      const mediaDetails = await mediaVaultService.getMedia(response.id);
-      const thumbnailPath = mediaDetails.latest_version?.thumbnail_path;
-
-      // Update to complete status with thumbnail
-      setUploadingFiles(prev => {
-        const updated = [...prev];
-        updated[index] = {
-          ...updated[index],
-          status: 'complete',
-          progress: 100,
-          thumbnailUrl: thumbnailPath ? `http://localhost:8000/${thumbnailPath}` : undefined
-        };
-        return updated;
-      });
-
-    } catch (error) {
-      console.error('Upload failed:', error);
-      setUploadingFiles(prev => {
-        const updated = [...prev];
-        updated[index] = {
-          ...updated[index],
-          status: 'error',
-          progress: 0,
-          error: error instanceof Error ? error.message : 'Upload failed'
-        };
-        return updated;
-      });
-    }
   };
 
-  const handleDrop = useCallback(async (e: React.DragEvent) => {
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
 
-    const files = Array.from(e.dataTransfer.files).filter(file =>
-      file.type.startsWith('image/') || file.type.startsWith('video/')
+    const files = Array.from(e.dataTransfer.files).filter(
+      file => file.type.startsWith('image/') || file.type.startsWith('video/')
     );
 
-    if (files.length === 0) {
-      alert('Please drop image or video files only');
-      return;
+    if (files.length > 0) {
+      await processFiles(files);
+    }
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const files = Array.from(e.target.files).filter(
+        file => file.type.startsWith('image/') || file.type.startsWith('video/')
+      );
+
+      if (files.length > 0) {
+        await processFiles(files);
+      }
+    }
+  };
+
+  const checkFileExists = async (fileName: string): Promise<boolean> => {
+    try {
+      // Get base filename without extension
+      const baseName = fileName.replace(/\.[^/.]+$/, '');
+      const response = await mediaVaultService.listMedia(0, 1000, baseName);
+      return response.media.some(media =>
+        media.base_filename.toLowerCase() === baseName.toLowerCase()
+      );
+    } catch {
+      return false;
+    }
+  };
+
+  const processFiles = async (files: File[]) => {
+    const newSlots: MediaSlot[] = [];
+
+    for (const file of files) {
+      // Step 2: Check if file already exists
+      const fileExists = await checkFileExists(file.name);
+
+      if (fileExists) {
+        // Step 2b: Fail the file if it already exists
+        newSlots.push({
+          id: Math.random().toString(36).substr(2, 9),
+          fileName: file.name,
+          fileSize: file.size,
+          fileType: file.type.startsWith('image/') ? 'image' : 'video',
+          status: 'failed',
+          progress: 0,
+          error: 'File already exists'
+        });
+      } else {
+        // Step 3: Create media slot with progress bar
+        const slot: MediaSlot = {
+          id: Math.random().toString(36).substr(2, 9),
+          fileName: file.name,
+          fileSize: file.size,
+          fileType: file.type.startsWith('image/') ? 'image' : 'video',
+          status: 'pending',
+          progress: 0
+        };
+        newSlots.push(slot);
+      }
     }
 
-    // Initialize uploading files state
-    const newUploadingFiles: UploadingFile[] = files.map(file => ({
-      file,
-      progress: 0,
-      status: 'uploading' as const
-    }));
+    setMediaSlots(prev => [...prev, ...newSlots]);
 
-    setUploadingFiles(newUploadingFiles);
+    // Process uploads for non-failed files
+    for (let i = 0; i < newSlots.length; i++) {
+      const slot = newSlots[i];
+      if (slot.status === 'failed') continue;
 
-    // Upload all files
-    await Promise.all(
-      files.map((file, index) => uploadFile(file, index))
-    );
+      const file = files.find(f => f.name === slot.fileName);
+      if (!file) continue;
 
-    // Notify parent to refresh media list
-    onUploadComplete();
-  }, [selectedTags, onUploadComplete]);
+      // Step 4: Start upload
+      setMediaSlots(prev => prev.map(s =>
+        s.id === slot.id ? { ...s, status: 'uploading', progress: 0 } : s
+      ));
 
-  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []).filter(file =>
-      file.type.startsWith('image/') || file.type.startsWith('video/')
-    );
+      // Simulate progress
+      const progressInterval = setInterval(() => {
+        setMediaSlots(prev => prev.map(s => {
+          if (s.id === slot.id && s.progress < 90) {
+            return { ...s, progress: Math.min(s.progress + 10, 90) };
+          }
+          return s;
+        }));
+      }, 200) as any;
 
-    if (files.length === 0) return;
+      try {
+        const response = await mediaVaultService.uploadMedia(file, selectedTags.length > 0 ? selectedTags : undefined);
 
-    // Initialize uploading files state
-    const newUploadingFiles: UploadingFile[] = files.map(file => ({
-      file,
-      progress: 0,
-      status: 'uploading' as const
-    }));
+        clearInterval(progressInterval);
 
-    setUploadingFiles(newUploadingFiles);
+        if (response) {
+          // Step 4b: Mark as uploaded
+          setMediaSlots(prev => prev.map(s =>
+            s.id === slot.id ? {
+              ...s,
+              status: 'uploaded',
+              progress: 100,
+              thumbnail: response.latest_version?.thumbnail_path
+            } : s
+          ));
 
-    // Upload all files
-    await Promise.all(
-      files.map((file, index) => uploadFile(file, index))
-    );
+          // Step 5: Refresh media list to show thumbnail
+          await onUploadComplete();
+        } else {
+          throw new Error('Upload failed');
+        }
+      } catch (error) {
+        clearInterval(progressInterval);
+        setMediaSlots(prev => prev.map(s =>
+          s.id === slot.id ? {
+            ...s,
+            status: 'failed',
+            progress: 0,
+            error: error instanceof Error ? error.message : 'Upload failed'
+          } : s
+        ));
+      }
+    }
 
-    // Notify parent to refresh media list
-    onUploadComplete();
+    // Emit upload session data if callback provided
+    if (onUploadSessionComplete) {
+      const uploadedSlots = newSlots.filter(slot => slot.status === 'uploaded');
+      if (uploadedSlots.length > 0) {
+        onUploadSessionComplete({
+          timestamp: Date.now(),
+          fileIds: [] // Will be populated by parent component
+        });
+      }
+    }
+  };
 
-    // Reset input
-    e.target.value = '';
-  }, [selectedTags, onUploadComplete]);
+  const removeSlot = (slotId: string) => {
+    setMediaSlots(prev => prev.filter(slot => slot.id !== slotId));
+  };
 
   const toggleTag = (tagId: number) => {
     setSelectedTags(prev =>
-      prev.includes(tagId) ? prev.filter(id => id !== tagId) : [...prev, tagId]
+      prev.includes(tagId)
+        ? prev.filter(id => id !== tagId)
+        : [...prev, tagId]
     );
   };
 
-  const clearCompleted = () => {
-    setUploadingFiles(prev => prev.filter(f => f.status !== 'complete'));
+  const formatFileSize = (bytes: number): string => {
+    return (bytes / 1024 / 1024).toFixed(2) + ' MB';
   };
 
-  const overallProgress = uploadingFiles.length > 0
-    ? Math.round(uploadingFiles.reduce((sum, f) => sum + f.progress, 0) / uploadingFiles.length)
-    : 0;
-
-  const completedCount = uploadingFiles.filter(f => f.status === 'complete').length;
-  const errorCount = uploadingFiles.filter(f => f.status === 'error').length;
-
   return (
-    <div className="space-y-4">
-      {/* Drop Zone */}
+    <div style={{ marginTop: '20px' }}>
       <div
         onDragEnter={handleDragEnter}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        className={`relative border-2 border-dashed rounded-3xl p-12 text-center transition-all duration-500 ${isDragging
-            ? 'border-cyan-500 bg-gradient-to-br from-cyan-500/20 to-purple-500/20 backdrop-blur-2xl scale-105 shadow-2xl shadow-cyan-500/50'
-            : 'border-purple-500/30 hover:border-purple-500/60 backdrop-blur-2xl bg-slate-900/30 hover:bg-slate-900/50'
-          }`}
+        style={{
+          border: `2px dashed ${isDragging ? '#3b82f6' : '#4b5563'}`,
+          borderRadius: '8px',
+          padding: '40px 20px',
+          textAlign: 'center',
+          backgroundColor: isDragging ? '#1e293b' : '#1f2937',
+          transition: 'all 0.2s',
+          cursor: 'pointer'
+        }}
+        onClick={() => fileInputRef.current?.click()}
       >
-        <input
-          type="file"
-          multiple
-          accept="image/*,video/*"
-          onChange={handleFileSelect}
-          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-        />
-
-        <div className="pointer-events-none">
-          <div className="text-8xl mb-6 animate-pulse">📁</div>
-          <p className="text-2xl font-black bg-gradient-to-r from-cyan-400 via-purple-400 to-pink-400 bg-clip-text text-transparent mb-3 uppercase tracking-wider">
-            Drop media files here or click to browse
-          </p>
-          <p className="text-base text-gray-400 font-semibold uppercase tracking-widest">
-            Supports images and videos
-          </p>
-        </div>
+        <div style={{ fontSize: '48px', marginBottom: '12px' }}>📁</div>
+        <p style={{ fontSize: '16px', color: '#f3f4f6', marginBottom: '8px', fontWeight: '500' }}>
+          Drop files here
+        </p>
+        <p style={{ fontSize: '14px', color: '#9ca3af', marginBottom: '16px' }}>
+          or
+        </p>
+        <button
+          type="button"
+          className="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            fileInputRef.current?.click();
+          }}
+        >
+          Browse Files
+        </button>
+        <p style={{ fontSize: '12px', color: '#9ca3af', marginTop: '12px' }}>
+          Supports images and videos
+        </p>
       </div>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept="image/*,video/*"
+        onChange={handleFileSelect}
+        style={{ display: 'none' }}
+      />
 
       {/* Enhancement Tags Selection */}
       {enhancementTags.length > 0 && (
-        <div>
-          <label className="block text-sm font-bold text-cyan-400 mb-4 uppercase tracking-widest">
+        <div style={{ marginTop: '20px' }}>
+          <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '8px', color: '#f3f4f6' }}>
             Enhancement Tags (Optional)
           </label>
-          <div className="flex flex-wrap gap-3">
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
             {enhancementTags.map(tag => (
               <button
                 key={tag.id}
                 onClick={() => toggleTag(tag.id)}
-                className={`px-5 py-2.5 rounded-2xl text-sm font-bold transition-all duration-300 border-2 uppercase tracking-wider ${selectedTags.includes(tag.id)
-                    ? 'text-white shadow-2xl scale-110 border-white/50'
-                    : 'backdrop-blur-xl bg-slate-900/50 text-gray-300 hover:bg-slate-800/70 border-purple-500/30 hover:border-purple-500/60 hover:scale-105'
-                  }`}
+                type="button"
                 style={{
-                  backgroundColor: selectedTags.includes(tag.id) ? tag.color : undefined,
-                  boxShadow: selectedTags.includes(tag.id) ? `0 0 20px ${tag.color}50` : undefined
+                  padding: '8px 16px',
+                  borderRadius: '6px',
+                  border: selectedTags.includes(tag.id) ? '2px solid' : '1px solid #4b5563',
+                  backgroundColor: selectedTags.includes(tag.id) ? tag.color : '#374151',
+                  color: selectedTags.includes(tag.id) ? 'white' : '#f3f4f6',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  transition: 'all 0.2s',
+                  borderColor: selectedTags.includes(tag.id) ? tag.color : '#4b5563'
                 }}
               >
                 {tag.name}
@@ -247,109 +281,136 @@ const MediaDropZone: React.FC<MediaDropZoneProps> = ({ enhancementTags, onUpload
         </div>
       )}
 
-      {/* Overall Progress */}
-      {uploadingFiles.length > 0 && (
-        <div className="backdrop-blur-2xl bg-slate-800/50 border border-cyan-500/30 rounded-3xl shadow-2xl p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-4">
-              <span className="text-base font-black text-cyan-400 uppercase tracking-wider">
-                Overall Progress
-              </span>
-              <span className="text-sm text-purple-400 font-bold">
-                {completedCount}/{uploadingFiles.length} complete
-                {errorCount > 0 && ` • ${errorCount} failed`}
-              </span>
-            </div>
-            {completedCount > 0 && (
-              <button
-                onClick={clearCompleted}
-                className="text-sm text-cyan-400 hover:text-cyan-300 font-bold backdrop-blur-xl bg-slate-900/50 px-4 py-2 rounded-2xl hover:bg-slate-900/70 border border-cyan-500/30 hover:border-cyan-500/50 transition-all uppercase tracking-wider"
+      {/* Media Slots */}
+      {mediaSlots.length > 0 && (
+        <div style={{ marginTop: '20px' }}>
+          <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px', color: '#f3f4f6' }}>
+            Upload Progress
+          </h3>
+          <div style={{ display: 'grid', gap: '8px' }}>
+            {mediaSlots.map((slot) => (
+              <div
+                key={slot.id}
+                style={{
+                  padding: '12px',
+                  backgroundColor: '#374151',
+                  borderRadius: '6px',
+                  border: slot.status === 'failed' ? '1px solid #ef4444' : '1px solid #4b5563'
+                }}
               >
-                Clear completed
-              </button>
-            )}
-          </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
+                    {/* Thumbnail or Icon */}
+                    <div style={{ width: '40px', height: '40px', borderRadius: '4px', overflow: 'hidden', backgroundColor: '#4b5563' }}>
+                      {slot.thumbnail ? (
+                        <img
+                          src={`http://localhost:8000/${slot.thumbnail}`}
+                          alt={slot.fileName}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                      ) : (
+                        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <span style={{ fontSize: '20px' }}>
+                            {slot.status === 'uploaded' ? '✅' :
+                              slot.status === 'uploading' ? '⏳' :
+                                slot.status === 'failed' ? '❌' :
+                                  slot.fileType === 'image' ? '🖼️' : '🎬'}
+                          </span>
+                        </div>
+                      )}
+                    </div>
 
-          <div className="w-full bg-slate-900/50 rounded-full h-4 overflow-hidden border border-purple-500/20">
-            <div
-              className="bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500 h-4 rounded-full transition-all duration-500 shadow-lg shadow-purple-500/50"
-              style={{ width: `${overallProgress}%` }}
-            />
-          </div>
-        </div>
-      )}
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: '14px', fontWeight: '500', color: '#f3f4f6' }}>
+                        {slot.fileName}
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#9ca3af' }}>
+                        {formatFileSize(slot.fileSize)}
+                        {slot.status === 'uploaded' && (
+                          <span style={{ marginLeft: '8px', fontWeight: '500', color: '#10b981' }}>
+                            ✓ Uploaded
+                          </span>
+                        )}
+                        {slot.status === 'failed' && slot.error && (
+                          <span style={{ marginLeft: '8px', fontWeight: '500', color: '#ef4444' }}>
+                            {slot.error}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
 
-      {/* Individual File Progress */}
-      {uploadingFiles.length > 0 && (
-        <div className="space-y-4">
-          {uploadingFiles.map((uploadFile, index) => (
-            <div
-              key={index}
-              className="backdrop-blur-2xl bg-slate-800/40 border border-purple-500/20 rounded-3xl shadow-xl p-5 flex items-center gap-5 hover:bg-slate-800/60 hover:border-purple-500/40 transition-all duration-500"
-            >
-              {/* Thumbnail Preview */}
-              <div className="w-20 h-20 flex-shrink-0 bg-gradient-to-br from-slate-900 via-purple-900/30 to-slate-900 rounded-2xl overflow-hidden border-2 border-purple-500/30">
-                {uploadFile.thumbnailUrl ? (
-                  <img
-                    src={uploadFile.thumbnailUrl}
-                    alt={uploadFile.file.name}
-                    className="w-full h-full object-cover"
-                  />
-                ) : uploadFile.status === 'complete' ? (
-                  <div className="w-full h-full flex items-center justify-center text-gray-400">
-                    <span className="text-2xl">✓</span>
-                  </div>
-                ) : uploadFile.status === 'error' ? (
-                  <div className="w-full h-full flex items-center justify-center text-red-400">
-                    <span className="text-2xl">✗</span>
-                  </div>
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-                  </div>
-                )}
-              </div>
-
-              {/* File Info and Progress */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm font-bold text-white truncate">
-                    {uploadFile.file.name}
-                  </p>
-                  <span className={`text-xs font-bold ml-3 px-3 py-1 rounded-xl uppercase tracking-wider ${uploadFile.status === 'uploading' ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' :
-                      uploadFile.status === 'processing' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' :
-                        uploadFile.status === 'complete' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
-                          'bg-red-500/20 text-red-400 border border-red-500/30'
-                    }`}>
-                    {uploadFile.status === 'uploading' && '⬆️ Uploading'}
-                    {uploadFile.status === 'processing' && '⚙️ Processing'}
-                    {uploadFile.status === 'complete' && '✓ Complete'}
-                    {uploadFile.status === 'error' && '✗ Failed'}
-                  </span>
+                  {slot.status !== 'uploaded' && (
+                    <button
+                      onClick={() => removeSlot(slot.id)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#dc2626',
+                        cursor: 'pointer',
+                        fontSize: '20px',
+                        padding: '4px'
+                      }}
+                    >
+                      ×
+                    </button>
+                  )}
                 </div>
 
                 {/* Progress Bar */}
-                {uploadFile.status !== 'complete' && uploadFile.status !== 'error' && (
-                  <div className="w-full bg-slate-900/50 rounded-full h-2.5 overflow-hidden border border-purple-500/20">
-                    <div
-                      className="bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500 h-2.5 rounded-full transition-all duration-300 shadow-lg shadow-purple-500/50"
-                      style={{ width: `${uploadFile.progress}%` }}
-                    />
+                {slot.status === 'uploading' && (
+                  <div style={{
+                    width: '100%',
+                    height: '6px',
+                    backgroundColor: '#4b5563',
+                    borderRadius: '3px',
+                    overflow: 'hidden'
+                  }}>
+                    <div style={{
+                      width: `${slot.progress}%`,
+                      height: '100%',
+                      backgroundColor: '#667eea',
+                      transition: 'width 0.3s ease'
+                    }} />
                   </div>
                 )}
 
-                {/* Error Message */}
-                {uploadFile.status === 'error' && uploadFile.error && (
-                  <p className="text-xs text-red-400 mt-2 font-semibold">{uploadFile.error}</p>
+                {/* Uploaded Status */}
+                {slot.status === 'uploaded' && (
+                  <div style={{
+                    width: '100%',
+                    height: '6px',
+                    backgroundColor: '#d1fae5',
+                    borderRadius: '3px',
+                    overflow: 'hidden'
+                  }}>
+                    <div style={{
+                      width: '100%',
+                      height: '100%',
+                      backgroundColor: '#10b981'
+                    }} />
+                  </div>
                 )}
 
-                {/* File Size */}
-                <p className="text-xs text-gray-500 mt-2 font-semibold">
-                  {(uploadFile.file.size / 1024 / 1024).toFixed(2)} MB
-                </p>
+                {/* Failed Status */}
+                {slot.status === 'failed' && (
+                  <div style={{
+                    width: '100%',
+                    height: '6px',
+                    backgroundColor: '#fee2e2',
+                    borderRadius: '3px',
+                    overflow: 'hidden'
+                  }}>
+                    <div style={{
+                      width: '100%',
+                      height: '100%',
+                      backgroundColor: '#ef4444'
+                    }} />
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       )}
     </div>
