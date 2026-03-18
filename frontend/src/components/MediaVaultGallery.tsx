@@ -250,7 +250,6 @@ const MediaVaultGallery: React.FC = () => {
             </div>
           )}
           <MediaDropZone
-            enhancementTags={enhancementTags}
             onUploadComplete={loadMedia}
             onUploadSessionComplete={handleUploadSessionComplete}
           />

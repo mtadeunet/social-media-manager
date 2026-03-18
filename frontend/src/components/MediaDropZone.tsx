@@ -1,9 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { mediaVaultService } from '../services/mediaVaultService';
-import type { EnhancementTag } from '../types/mediaVault';
 
 interface MediaDropZoneProps {
-  enhancementTags: EnhancementTag[];
   onUploadComplete: () => void;
   onUploadSessionComplete?: (sessionData: { timestamp: number; fileIds: number[] }) => void;
 }
@@ -19,10 +17,9 @@ interface MediaSlot {
   error?: string;
 }
 
-const MediaDropZone: React.FC<MediaDropZoneProps> = ({ enhancementTags, onUploadComplete, onUploadSessionComplete }) => {
+const MediaDropZone: React.FC<MediaDropZoneProps> = ({ onUploadComplete, onUploadSessionComplete }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [mediaSlots, setMediaSlots] = useState<MediaSlot[]>([]);
-  const [selectedTags, setSelectedTags] = useState<number[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleDragEnter = (e: React.DragEvent) => {
@@ -139,7 +136,7 @@ const MediaDropZone: React.FC<MediaDropZoneProps> = ({ enhancementTags, onUpload
       }, 200) as any;
 
       try {
-        const response = await mediaVaultService.uploadMedia(file, selectedTags.length > 0 ? selectedTags : undefined);
+        const response = await mediaVaultService.uploadMedia(file);
 
         clearInterval(progressInterval);
 
@@ -198,13 +195,6 @@ const MediaDropZone: React.FC<MediaDropZoneProps> = ({ enhancementTags, onUpload
     setMediaSlots(prev => prev.filter(slot => slot.id !== slotId));
   };
 
-  const toggleTag = (tagId: number) => {
-    setSelectedTags(prev =>
-      prev.includes(tagId)
-        ? prev.filter(id => id !== tagId)
-        : [...prev, tagId]
-    );
-  };
 
   const formatFileSize = (bytes: number): string => {
     return (bytes / 1024 / 1024).toFixed(2) + ' MB';
@@ -259,37 +249,6 @@ const MediaDropZone: React.FC<MediaDropZoneProps> = ({ enhancementTags, onUpload
         style={{ display: 'none' }}
       />
 
-      {/* Enhancement Tags Selection */}
-      {enhancementTags.length > 0 && (
-        <div style={{ marginTop: '20px' }}>
-          <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '8px', color: '#f3f4f6' }}>
-            Enhancement Tags (Optional)
-          </label>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-            {enhancementTags.map(tag => (
-              <button
-                key={tag.id}
-                onClick={() => toggleTag(tag.id)}
-                type="button"
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: '6px',
-                  border: selectedTags.includes(tag.id) ? '2px solid' : '1px solid #4b5563',
-                  backgroundColor: selectedTags.includes(tag.id) ? tag.color : '#374151',
-                  color: selectedTags.includes(tag.id) ? 'white' : '#f3f4f6',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  fontWeight: '500',
-                  transition: 'all 0.2s',
-                  borderColor: selectedTags.includes(tag.id) ? tag.color : '#4b5563'
-                }}
-              >
-                {tag.name}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Media Slots */}
       {mediaSlots.length > 0 && (
