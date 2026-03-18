@@ -10,6 +10,10 @@ import io
 from ..models import MediaVault, MediaVersion, EnhancementTag
 from ..models.associations import VersionEnhancementTag
 from ..models.base import get_db
+from ..schemas.media_vault import (
+    MediaVaultResponse, MediaVaultListResponse, MediaVersionResponse,
+    EnhancementTagResponse, MediaUploadResponse
+)
 
 router = APIRouter(prefix="/media-vault", tags=["media-vault"])
 
@@ -197,17 +201,17 @@ async def upload_media(
     
     db.commit()
     
-    return {
-        "id": media_vault.id,
-        "base_filename": media_vault.base_filename,
-        "file_type": media_vault.file_type,
-        "latest_version": {
+    return MediaUploadResponse(
+        id=media_vault.id,
+        base_filename=media_vault.base_filename,
+        file_type=media_vault.file_type,
+        latest_version={
             "id": media_version.id,
             "filename": media_version.filename,
             "file_size": media_version.file_size
         },
-        "message": "Media uploaded successfully"
-    }
+        message="Media uploaded successfully"
+    )
 
 
 @router.get("/")
@@ -247,43 +251,57 @@ async def list_media(
                     # For invalid tags, get notes and add as separate entries
                     notes = get_tag_notes(version.id, tag.id, db)
                     if notes:
-                        all_tags.append({
-                            "id": tag.id,
-                            "name": tag.name,
-                            "color": tag.color,
-                            "notes": notes
-                        })
+                        all_tags.append(EnhancementTagResponse(
+                            id=tag.id,
+                            name=tag.name,
+                            color=tag.color,
+                            created_at=tag.created_at.isoformat(),
+                            notes=notes
+                        ))
                 elif tag.id not in seen_tags:
                     # For normal tags, only add once
-                    all_tags.append({
-                        "id": tag.id,
-                        "name": tag.name,
-                        "color": tag.color,
-                        "notes": None
-                    })
+                    all_tags.append(EnhancementTagResponse(
+                        id=tag.id,
+                        name=tag.name,
+                        color=tag.color,
+                        created_at=tag.created_at.isoformat(),
+                        notes=None
+                    ))
                     seen_tags.add(tag.id)
         
-        result.append({
-            "id": media.id,
-            "base_filename": media.base_filename,
-            "file_type": media.file_type,
-            "is_usable": media.is_usable,
-            "created_at": media.created_at.isoformat(),
-            "latest_version": {
-                "id": latest_version.id if latest_version else None,
-                "filename": latest_version.filename if latest_version else None,
-                "thumbnail_path": latest_version.thumbnail_path if latest_version else None,
-                "enhancement_tags": all_tags
-            } if latest_version else None,
-            "version_count": len(media.versions)
-        })
+        # Create latest version response
+        latest_version_response = None
+        if latest_version:
+            latest_version_response = MediaVersionResponse(
+                id=latest_version.id,
+                media_vault_id=latest_version.media_vault_id,
+                filename=latest_version.filename,
+                file_path=latest_version.file_path,
+                thumbnail_path=latest_version.thumbnail_path,
+                file_size=latest_version.file_size,
+                upload_date=latest_version.upload_date.isoformat(),
+                is_active=latest_version.is_active,
+                enhancement_tags=all_tags
+            )
+        
+        result.append(MediaVaultResponse(
+            id=media.id,
+            base_filename=media.base_filename,
+            file_type=media.file_type,
+            is_usable=media.is_usable,
+            created_at=media.created_at.isoformat(),
+            updated_at=media.updated_at.isoformat(),
+            latest_version=latest_version_response,
+            version_count=len(media.versions),
+            enhancement_tags=all_tags
+        ))
     
-    return {
-        "media": result,
-        "total": len(media_items),
-        "skip": skip,
-        "limit": limit
-    }
+    return MediaVaultListResponse(
+        media=result,
+        total=len(media_items),
+        skip=skip,
+        limit=limit
+    )
 
 
 @router.get("/{media_id}")
@@ -294,34 +312,41 @@ async def get_media(media_id: int, db: Session = Depends(get_db)):
     if not media:
         raise HTTPException(status_code=404, detail="Media not found")
     
-    return {
-        "id": media.id,
-        "base_filename": media.base_filename,
-        "file_type": media.file_type,
-        "is_usable": media.is_usable,
-        "created_at": media.created_at.isoformat(),
-        "updated_at": media.updated_at.isoformat(),
-        "versions": [
-            {
-                "id": version.id,
-                "filename": version.filename,
-                "file_path": version.file_path,
-                "file_size": version.file_size,
-                "upload_date": version.upload_date.isoformat(),
-                "thumbnail_path": version.thumbnail_path,
-                "enhancement_tags": [
-                    {
-                        "id": tag.id,
-                        "name": tag.name,
-                        "color": tag.color,
-                        "notes": get_tag_notes(version.id, tag.id, db) if tag.name == 'invalid' else None
-                    }
-                    for tag in version.enhancement_tags
-                ]
-            }
-            for version in sorted(media.versions, key=lambda v: v.upload_date)
-        ]
-    }
+    # Build versions with proper schema
+    versions = []
+    for version in sorted(media.versions, key=lambda v: v.upload_date):
+        tags = []
+        for tag in version.enhancement_tags:
+            notes = get_tag_notes(version.id, tag.id, db) if tag.name == 'invalid' else None
+            tags.append(EnhancementTagResponse(
+                id=tag.id,
+                name=tag.name,
+                color=tag.color,
+                created_at=tag.created_at.isoformat(),
+                notes=notes
+            ))
+        
+        versions.append(MediaVersionResponse(
+            id=version.id,
+            media_vault_id=version.media_vault_id,
+            filename=version.filename,
+            file_path=version.file_path,
+            thumbnail_path=version.thumbnail_path,
+            file_size=version.file_size,
+            upload_date=version.upload_date.isoformat(),
+            is_active=version.is_active,
+            enhancement_tags=tags
+        ))
+    
+    return MediaVaultResponse(
+        id=media.id,
+        base_filename=media.base_filename,
+        file_type=media.file_type,
+        is_usable=media.is_usable,
+        created_at=media.created_at.isoformat(),
+        updated_at=media.updated_at.isoformat(),
+        versions=versions
+    )
 
 
 @router.put("/{media_id}/usable")
@@ -338,7 +363,7 @@ async def toggle_usability(media_id: int, db: Session = Depends(get_db)):
     
     return {
         "id": media.id,
-        "is_usable": media.is_usable,
+        "isUsable": media.is_usable,
         "message": f"Media marked as {'usable' if media.is_usable else 'not usable'}"
     }
 

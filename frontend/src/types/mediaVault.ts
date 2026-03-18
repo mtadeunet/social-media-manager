@@ -1,28 +1,28 @@
 export interface MediaVault {
   id: number;
-  base_filename: string;
-  file_type: 'image' | 'video';
-  is_usable: boolean;
-  created_at: string;
-  updated_at: string;
-  latest_version?: MediaVersion;
+  baseFilename: string;
+  fileType: 'image' | 'video';
+  isUsable: boolean;
+  createdAt: string;
+  updatedAt: string;
+  latestVersion?: MediaVersion;
   versions?: MediaVersion[];
-  version_count?: number;
-  enhancement_tags?: EnhancementTag[];
-  content_type_tags?: ContentTypeTag[];
-  platform_tags?: PlatformTag[];
+  versionCount?: number;
+  enhancementTags?: EnhancementTag[];
+  contentTypes?: ContentType[];
+  platformTags?: PlatformTag[];
 }
 
 export interface MediaVersion {
   id: number;
-  media_vault_id: number;
+  mediaVaultId: number;
   filename: string;
-  file_path: string;
-  thumbnail_path: string;
-  file_size: number;
-  upload_date: string;
-  is_active: boolean;
-  enhancement_tags?: EnhancementTag[];
+  filePath: string;
+  thumbnailPath: string;
+  fileSize: number;
+  uploadDate: string;
+  isActive: boolean;
+  enhancementTags?: EnhancementTag[];
 }
 
 export interface EnhancementTag {
@@ -30,21 +30,28 @@ export interface EnhancementTag {
   name: string;
   description?: string;
   color: string;
-  created_at: string;
+  createdAt: string;
   notes?: string; // For invalid tags to store the actual tag name (e.g., "v1", "v2")
 }
 
-export interface ContentTypeTag {
+export interface ContentType {
   id: number;
   name: string;
   description?: string;
   color: string;
-  has_phases: boolean;
-  phase_count?: number;
-  parent_id?: number;
-  phase_number?: number;
-  created_at: string;
-  phases?: ContentTypeTag[];
+  icon?: string;
+  hasPhases: boolean;
+  phaseNumber?: number;
+  phaseName?: string;
+  phaseColor?: string;
+  isPhase: boolean;
+  isParent: boolean;
+  displayName: string;
+  effectiveColor: string;
+  parentContentTypeId?: number;
+  parent?: ContentType; // Parent content type if this is a phase
+  phases?: ContentType[];
+  createdAt: string;
 }
 
 export interface PlatformTag {
@@ -52,7 +59,7 @@ export interface PlatformTag {
   name: string;
   icon?: string;
   color: string;
-  created_at: string;
+  createdAt: string;
 }
 
 export interface MediaVaultFilters {

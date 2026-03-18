@@ -5,6 +5,13 @@ from pydantic import BaseModel
 
 from ..models import EnhancementTag, ContentTypeTag, PlatformTag, SystemSetting
 from ..models.base import get_db
+from ..schemas.tags import (
+    EnhancementTagResponse, EnhancementTagCreate, EnhancementTagUpdate,
+    PlatformTagResponse, PlatformTagCreate, PlatformTagUpdate,
+    ContentTypeTagResponse, ContentTypeTagCreate, ContentTypeTagUpdate,
+    PhaseResponse, PhaseCreate as TagPhaseCreate, PhaseUpdate,
+    StyleTagResponse, StyleTagCreate, StyleTagUpdate
+)
 
 router = APIRouter(prefix="/tags", tags=["tags"])
 
@@ -81,19 +88,19 @@ async def list_enhancement_tags(db: Session = Depends(get_db)):
     """List all enhancement tags"""
     tags = db.query(EnhancementTag).all()
     return [
-        {
-            "id": tag.id,
-            "name": tag.name,
-            "description": tag.description,
-            "color": tag.color,
-            "created_at": tag.created_at.isoformat()
-        }
+        EnhancementTagResponse(
+            id=tag.id,
+            name=tag.name,
+            description=tag.description,
+            color=tag.color,
+            created_at=tag.created_at.isoformat()
+        )
         for tag in tags
     ]
 
 
 @router.post("/enhancement")
-async def create_enhancement_tag(tag: TagCreate, db: Session = Depends(get_db)):
+async def create_enhancement_tag(tag: EnhancementTagCreate, db: Session = Depends(get_db)):
     """Create a new enhancement tag"""
     
     existing = db.query(EnhancementTag).filter(EnhancementTag.name == tag.name).first()
@@ -109,17 +116,17 @@ async def create_enhancement_tag(tag: TagCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_tag)
     
-    return {
-        "id": new_tag.id,
-        "name": new_tag.name,
-        "description": new_tag.description,
-        "color": new_tag.color,
-        "created_at": new_tag.created_at.isoformat()
-    }
+    return EnhancementTagResponse(
+        id=new_tag.id,
+        name=new_tag.name,
+        description=new_tag.description,
+        color=new_tag.color,
+        created_at=new_tag.created_at.isoformat()
+    )
 
 
 @router.put("/enhancement/{tag_id}")
-async def update_enhancement_tag(tag_id: int, tag: TagUpdate, db: Session = Depends(get_db)):
+async def update_enhancement_tag(tag_id: int, tag: EnhancementTagUpdate, db: Session = Depends(get_db)):
     """Update an enhancement tag"""
     
     # Protect invalid (ID 1) and original (ID 2) tags from modification
@@ -145,13 +152,13 @@ async def update_enhancement_tag(tag_id: int, tag: TagUpdate, db: Session = Depe
     db.commit()
     db.refresh(db_tag)
     
-    return {
-        "id": db_tag.id,
-        "name": db_tag.name,
-        "description": db_tag.description,
-        "color": db_tag.color,
-        "created_at": db_tag.created_at.isoformat()
-    }
+    return EnhancementTagResponse(
+        id=db_tag.id,
+        name=db_tag.name,
+        description=db_tag.description,
+        color=db_tag.color,
+        created_at=db_tag.created_at.isoformat()
+    )
 
 
 @router.delete("/enhancement/{tag_id}")

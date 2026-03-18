@@ -35,7 +35,6 @@ class ContentTypeTag(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     
     # Relationships
-    media_vaults = relationship("MediaVault", secondary="media_content_type_tags", back_populates="content_type_tags")
     phases = relationship("ContentTypeTag", backref="parent_content_type", remote_side=[id])
     
     def __repr__(self):

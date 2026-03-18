@@ -14,7 +14,7 @@ from ..core import (
     save_upload_file
 )
 
-router = APIRouter(prefix="/api/media", tags=["media"])
+router = APIRouter(prefix="/media", tags=["media"])
 
 @router.get("/posts/{post_id}/files")
 def get_post_files(

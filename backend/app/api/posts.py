@@ -6,7 +6,7 @@ from ..database import get_db
 from ..models import Post, MediaFile
 from ..schemas import PostCreate, PostUpdate, PostResponse, PostList
 
-router = APIRouter(prefix="/api/posts", tags=["posts"])
+router = APIRouter(prefix="/posts", tags=["posts"])
 
 @router.get("/", response_model=List[PostList])
 def get_posts(

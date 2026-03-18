@@ -87,7 +87,7 @@ const MediaVersionModal: React.FC<MediaVersionModalProps> = ({
     setSelectedVersion(version);
 
     // Get current tags for this version
-    const currentTags = version.enhancement_tags || [];
+    const currentTags = version.enhancementTags || [];
     setSelectedTags(currentTags);
 
     // Set available tags (exclude invalid tag and original tag for non-original versions)
@@ -126,14 +126,14 @@ const MediaVersionModal: React.FC<MediaVersionModalProps> = ({
       setLoading(true);
 
       // Determine tags to add and remove
-      const currentTagIds = selectedVersion.enhancement_tags?.map(t => t.id) || [];
+      const currentTagIds = selectedVersion.enhancementTags?.map(t => t.id) || [];
       const newTagIds = selectedTags.map(t => t.id);
 
       const tagsToAdd = newTagIds.filter(id => !currentTagIds.includes(id));
       const tagsToRemove = currentTagIds.filter(id => !newTagIds.includes(id) && id !== 2); // Don't remove original tag (ID 2)
 
       // Separate invalid tags to remove
-      const invalidTagsToRemove = selectedVersion.enhancement_tags?.filter(t => t.name === 'invalid' && t.notes && !newTagIds.includes(t.id))
+      const invalidTagsToRemove = selectedVersion.enhancementTags?.filter(t => t.name === 'invalid' && t.notes && !newTagIds.includes(t.id))
         .map(t => t.notes || '') || [];
 
       await mediaVaultService.updateVersionTags(selectedVersion.id, {
@@ -165,7 +165,7 @@ const MediaVersionModal: React.FC<MediaVersionModalProps> = ({
       <div className="bg-gray-800 rounded-lg p-6 max-w-4xl max-h-[90vh] overflow-y-auto w-full mx-4">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-bold text-white">
-            Media Versions - {media.base_filename.replace(/_[a-f0-9]{4}$/, '')}
+            Media Versions - {media.baseFilename?.replace(/_[a-f0-9]{4}$/, '') || 'Unknown'}
           </h2>
           <button
             onClick={onClose}
@@ -196,7 +196,7 @@ const MediaVersionModal: React.FC<MediaVersionModalProps> = ({
                       {/* Thumbnail */}
                       <div className="bg-gray-600 rounded-lg mb-3 overflow-hidden relative" style={{ height: '180px' }}>
                         {/* Delete button overlaying the thumbnail - Only for non-original versions */}
-                        {!version.enhancement_tags?.some(tag => tag.name === 'original') && (
+                        {!version.enhancementTags?.some(tag => tag.name === 'original') && (
                           <div
                             className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
                             style={{
@@ -233,9 +233,9 @@ const MediaVersionModal: React.FC<MediaVersionModalProps> = ({
                             }}>🗑️</span>
                           </div>
                         )}
-                        {version.thumbnail_path ? (
+                        {version.thumbnailPath ? (
                           <img
-                            src={`http://localhost:8000/${version.thumbnail_path}`}
+                            src={`http://localhost:8000/${version.thumbnailPath}`}
                             alt={`Version ${index + 1}`}
                             className="w-full h-full object-cover"
                           />
@@ -250,8 +250,8 @@ const MediaVersionModal: React.FC<MediaVersionModalProps> = ({
                       <div className="text-center">
                         {/* Enhancement Tags */}
                         <div className="flex flex-wrap gap-1 justify-center mb-2">
-                          {version.enhancement_tags && version.enhancement_tags.length > 0 &&
-                            version.enhancement_tags.map((tag: EnhancementTag) => {
+                          {version.enhancementTags && version.enhancementTags.length > 0 &&
+                            version.enhancementTags.map((tag: any) => {
                               const validTag = enhancementTags.find(t => t.id === tag.id);
                               // Check if this is an invalid tag with notes
                               const isInvalidTag = tag.name === 'invalid' && tag.notes;
@@ -306,29 +306,12 @@ const MediaVersionModal: React.FC<MediaVersionModalProps> = ({
             {/* Sort Controls */}
             {versions.length > 1 && (
               <div className="flex items-center justify-center space-x-4 pt-4 border-t border-gray-600">
-                <span className="text-sm text-gray-400">Sort versions:</span>
-                <button
-                  className="px-3 py-1 bg-gray-600 hover:bg-gray-700 text-white text-xs rounded-md transition-colors"
-                  onClick={() => {
-                    const sortedVersions = [...versions].sort((a, b) =>
-                      new Date(a.upload_date).getTime() - new Date(b.upload_date).getTime()
-                    );
-                    // Keep original first, sort the rest
-                    const original = sortedVersions[0];
-                    const others = sortedVersions.slice(1).sort((a, b) =>
-                      new Date(a.upload_date).getTime() - new Date(b.upload_date).getTime()
-                    );
-                    setVersions([original, ...others]);
-                  }}
-                >
-                  Date (Oldest)
-                </button>
                 <button
                   className="px-3 py-1 bg-gray-600 hover:bg-gray-700 text-white text-xs rounded-md transition-colors"
                   onClick={() => {
                     const original = versions[0];
                     const others = [...versions.slice(1)].sort((a, b) =>
-                      new Date(b.upload_date).getTime() - new Date(a.upload_date).getTime()
+                      new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime()
                     );
                     setVersions([original, ...others]);
                   }}
@@ -340,8 +323,8 @@ const MediaVersionModal: React.FC<MediaVersionModalProps> = ({
                   onClick={() => {
                     const original = versions[0];
                     const others = [...versions.slice(1)].sort((a, b) => {
-                      const aTags = a.enhancement_tags?.map(t => t.name).join('') || '';
-                      const bTags = b.enhancement_tags?.map(t => t.name).join('') || '';
+                      const aTags = a.enhancementTags?.map(t => t.name).join('') || '';
+                      const bTags = b.enhancementTags?.map(t => t.name).join('') || '';
                       return aTags.localeCompare(bTags);
                     });
                     setVersions([original, ...others]);
@@ -370,7 +353,7 @@ const MediaVersionModal: React.FC<MediaVersionModalProps> = ({
             <div className="mb-4 p-2 bg-gray-700 rounded">
               <div className="text-xs text-gray-400 mb-1">Current tags:</div>
               <div className="flex flex-wrap gap-1">
-                {selectedVersion.enhancement_tags?.map(tag => (
+                {selectedVersion.enhancementTags?.map(tag => (
                   <span
                     key={tag.id}
                     className="text-[10px] px-2 py-0.5 rounded-md font-medium border"

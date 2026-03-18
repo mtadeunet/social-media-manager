@@ -187,17 +187,17 @@ const MediaVaultGallery: React.FC = () => {
 
   // Check if a media item has invalid tags (tags that don't exist in enhancement_tags)
   const hasInvalidTags = (media: MediaVault): boolean => {
-    if (!media.latest_version?.enhancement_tags) return false;
-    const validTagIds = new Set(enhancementTags.map(t => t.id));
-    return media.latest_version.enhancement_tags.some(tag => !validTagIds.has(tag.id));
+    if (!media.latestVersion?.enhancementTags) return false;
+    const validTagIds = new Set(enhancementTags.map((t: EnhancementTag) => t.id));
+    return media.latestVersion.enhancementTags.some((tag: any) => !validTagIds.has(tag.id));
   };
 
   // Remove hash suffix from filename for display
-  const getDisplayFilename = (baseFilename: string): string => {
+  const getDisplayFilename = (baseFilename: string | undefined): string => {
+    if (!baseFilename) return 'Unknown';
     // Remove the _hash4 suffix (e.g., "photo_b4e1" -> "photo")
     return baseFilename.replace(/_[a-f0-9]{4}$/, '');
   };
-
 
   const handleFiltersChange = useCallback((newFilters: Partial<FilterState>) => {
     setFilters(prev => ({ ...prev, ...newFilters }));
@@ -323,10 +323,10 @@ const MediaVaultGallery: React.FC = () => {
               <div className="aspect-square bg-gray-800 rounded-lg hover:bg-gray-700 transition-colors duration-200 relative overflow-hidden">
                 {/* Thumbnail fills the cell */}
                 <div className="absolute inset-0 p-[10px] pb-0">
-                  {media.latest_version?.thumbnail_path ? (
+                  {media.latestVersion?.thumbnailPath ? (
                     <img
-                      src={`http://localhost:8000/${media.latest_version.thumbnail_path}`}
-                      alt={media.base_filename}
+                      src={`http://localhost:8000/${media.latestVersion.thumbnailPath}`}
+                      alt={media.baseFilename}
                       className="w-full h-full object-cover rounded"
                     />
                   ) : (
@@ -420,15 +420,15 @@ const MediaVaultGallery: React.FC = () => {
 
               {/* Filename */}
               <div className="mt-1 px-1 text-center">
-                <h3 className="text-xs text-gray-300 truncate font-medium" title={media.base_filename}>
-                  {getDisplayFilename(media.base_filename)}
+                <h3 className="text-xs text-gray-300 truncate font-medium" title={media.baseFilename || 'Unknown'}>
+                  {getDisplayFilename(media.baseFilename)}
                 </h3>
               </div>
 
               {/* Enhancement Tags */}
-              {media.latest_version?.enhancement_tags && media.latest_version.enhancement_tags.length > 0 && (
+              {media.latestVersion?.enhancementTags && media.latestVersion.enhancementTags.length > 0 && (
                 <div className="mt-1 px-1 flex flex-wrap gap-1 justify-center">
-                  {media.latest_version.enhancement_tags.map((tag: EnhancementTag) => {
+                  {media.latestVersion.enhancementTags.map((tag: any) => {
                     const validTag = enhancementTags.find(t => t.id === tag.id);
                     // Check if this is an invalid tag with notes
                     const isInvalidTag = tag.name === 'invalid' && tag.notes;
@@ -455,9 +455,9 @@ const MediaVaultGallery: React.FC = () => {
               )}
 
               {/* Content Type Tags */}
-              {media.content_type_tags && media.content_type_tags.length > 0 && (
+              {media.contentTypes && media.contentTypes.length > 0 && (
                 <div className="mt-1 px-1 flex flex-wrap gap-1 justify-center">
-                  {media.content_type_tags.map((tag: any) => {
+                  {media.contentTypes.map((tag: any) => {
                     const validTag = contentTypeTags.find(t => t.id === tag.id);
                     const tagColor = validTag ? tag.color : '#6b7280';
                     return (

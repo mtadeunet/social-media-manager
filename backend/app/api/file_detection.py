@@ -11,7 +11,7 @@ import asyncio
 from concurrent.futures import TimeoutError
 import time
 
-router = APIRouter(prefix="/api/file-detection", tags=["file-detection"])
+router = APIRouter(prefix="/file-detection", tags=["file-detection"])
 
 # Global dictionary to store last scan times for each post
 last_scan_times = {}
