@@ -1,16 +1,24 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { contentTypeService, ContentTypeTag } from '../services/contentTypeService';
 import { mediaVaultService } from '../services/mediaVaultService';
+import type { FilterState } from '../types/filters';
 import { EnhancementTag, MediaVault } from '../types/mediaVault';
-import MediaDropZone from './MediaDropZone.tsx';
+import FilterBar from './FilterBar';
+import MediaDropZone from './MediaDropZone';
 import MediaVersionModal from './MediaVersionModal';
+import SelectionControls from './SelectionControls';
 import TagsManagementModal from './TagsManagementModal';
 
 const MediaVaultGallery: React.FC = () => {
   const [mediaItems, setMediaItems] = useState<MediaVault[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [showUsableOnly, setShowUsableOnly] = useState(false);
+  // Filter state
+  const [filters, setFilters] = useState<FilterState>({
+    searchTerm: '',
+    showUsableOnly: false,
+    uploadFilter: 'none',
+    timeRangeFilter: { value: 10, unit: 'minutes' }
+  });
   const [backendConnected, setBackendConnected] = useState(false);
 
   // Selection state
@@ -18,9 +26,6 @@ const MediaVaultGallery: React.FC = () => {
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
 
 
-  // Upload filter state
-  const [uploadFilter, setUploadFilter] = useState<'none' | 'last-session' | 'time-range'>('none');
-  const [timeRangeFilter, setTimeRangeFilter] = useState({ value: 10, unit: 'minutes' as const });
 
   // Tags state
   const [enhancementTags, setEnhancementTags] = useState<EnhancementTag[]>([]);
@@ -34,7 +39,7 @@ const MediaVaultGallery: React.FC = () => {
   useEffect(() => {
     loadMedia();
     loadTags();
-  }, [searchTerm, showUsableOnly, uploadFilter, timeRangeFilter]);
+  }, [filters.searchTerm, filters.showUsableOnly, filters.uploadFilter, filters.timeRangeFilter]);
 
   // Periodic connection check
   useEffect(() => {
@@ -194,6 +199,21 @@ const MediaVaultGallery: React.FC = () => {
   };
 
 
+  const handleFiltersChange = useCallback((newFilters: Partial<FilterState>) => {
+    setFilters(prev => ({ ...prev, ...newFilters }));
+  }, []);
+
+  const handleClearFilters = useCallback(() => {
+    setFilters({
+      searchTerm: '',
+      showUsableOnly: false,
+      uploadFilter: 'none',
+      timeRangeFilter: { value: 10, unit: 'minutes' }
+    });
+  }, []);
+
+  const hasActiveFilters = Boolean(filters.searchTerm || filters.showUsableOnly || filters.uploadFilter !== 'none');
+
   const handleUploadSessionComplete = () => {
     // Refresh media after upload
     loadMedia();
@@ -255,137 +275,22 @@ const MediaVaultGallery: React.FC = () => {
           />
         </div>
 
-        {/* Filters */}
-        <div className="bg-gray-800 rounded-2xl p-6 mb-8">
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="text-white font-medium drop-shadow">
-                Showing {mediaItems.length} file{mediaItems.length !== 1 ? 's' : ''}
-                {mediaItems.length > 0 && (
-                  <span className="ml-4">
-                    <button
-                      onClick={handleSelectAll}
-                      className="ml-2 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-md border border-blue-700 shadow-sm hover:shadow-md transition-all duration-200 font-medium"
-                    >
-                      Select All
-                    </button>
-                    <button
-                      onClick={handleClearSelection}
-                      className="ml-2 px-3 py-1 bg-gray-600 hover:bg-gray-700 text-white text-xs rounded-md border border-gray-700 shadow-sm hover:shadow-md transition-all duration-200 font-medium"
-                    >
-                      Clear Selection
-                    </button>
-                  </span>
-                )}
-              </div>
-            </div>
-            {selectedMediaIds.size > 0 && (
-              <div className="text-white text-sm">
-                <span className="ml-3">• {selectedMediaIds.size} selected</span>
-                <button
-                  onClick={() => setSelectedMediaIds(new Set())}
-                  className="ml-2 px-3 py-1 bg-gray-600 hover:bg-gray-700 text-white text-xs rounded-md border border-gray-700 shadow-sm hover:shadow-md transition-all duration-200 font-medium"
-                >
-                  Clear
-                </button>
-                <button
-                  onClick={handleDeleteSelected}
-                  className="ml-2 px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded-md border border-red-700 shadow-sm hover:shadow-md transition-all duration-200 font-medium"
-                >
-                  Delete Selected
-                </button>
-              </div>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            {/* Upload Filter Dropdown */}
-            <div className="relative">
-              <select
-                value={uploadFilter}
-                onChange={(e) => setUploadFilter(e.target.value as any)}
-                className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-gray-600 transition-all text-white text-sm"
-              >
-                <option value="none" className="bg-gray-700">All Uploads</option>
-                <option value="last-session" className="bg-gray-700">Last Upload Session</option>
-                <option value="time-range" className="bg-gray-700">Time Range</option>
-              </select>
-            </div>
+        {/* Filter Bar */}
+        <FilterBar
+          filters={filters}
+          onFiltersChange={handleFiltersChange}
+          onClearFilters={handleClearFilters}
+          hasActiveFilters={hasActiveFilters}
+        />
 
-            {/* Time Range Filter (shown when time-range is selected) */}
-            {uploadFilter === 'time-range' && (
-              <div className="flex items-center gap-2">
-                <select
-                  value={timeRangeFilter.unit}
-                  onChange={(e) => setTimeRangeFilter(prev => ({ ...prev, unit: e.target.value as any }))}
-                  className="px-2 py-1 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-gray-600 transition-all text-white text-xs"
-                >
-                  <option value="minutes" className="bg-gray-700">Minutes</option>
-                  <option value="hours" className="bg-gray-700">Hours</option>
-                  <option value="days" className="bg-gray-700">Days</option>
-                </select>
-                <input
-                  type="number"
-                  min="1"
-                  value={timeRangeFilter.value}
-                  onChange={(e) => setTimeRangeFilter(prev => ({ ...prev, value: parseInt(e.target.value) || 1 }))}
-                  className="w-16 px-2 py-1 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-gray-600 transition-all text-white text-xs text-center"
-                />
-              </div>
-            )}
-
-            {/* Clear Filters Button */}
-            {(uploadFilter !== 'none' || searchTerm || showUsableOnly) && (
-              <button
-                onClick={() => {
-                  setUploadFilter('none');
-                  setSearchTerm('');
-                  setShowUsableOnly(false);
-                }}
-                className="px-3 py-1 bg-gray-700 text-white rounded-lg hover:bg-gray-600 text-xs font-medium transition-all duration-200 border border-gray-600"
-              >
-                Clear Filters
-              </button>
-            )}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label className="block text-sm font-medium text-white mb-2 drop-shadow">Search</label>
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search by filename..."
-              className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-gray-600 transition-all placeholder-gray-400 text-white"
-            />
-          </div>
-          <div className="flex items-end">
-            <label className="flex items-center space-x-3 cursor-pointer px-4 py-3 hover:bg-gray-700/50 transition-all w-full">
-              <input
-                type="checkbox"
-                checked={showUsableOnly}
-                onChange={(e) => setShowUsableOnly(e.target.checked)}
-                className="w-5 h-5 text-blue-600 bg-gray-600 border-gray-500 rounded focus:ring-blue-500"
-              />
-              <span className="text-sm font-medium text-white">Show usable only</span>
-            </label>
-
-            {/* Clear Filters Button */}
-            {(uploadFilter !== 'none' || searchTerm || showUsableOnly) && (
-              <button
-                onClick={() => {
-                  setUploadFilter('none');
-                  setSearchTerm('');
-                  setShowUsableOnly(false);
-                }}
-                className="px-3 py-1 bg-gray-700 text-white rounded-lg hover:bg-gray-600 text-xs font-medium transition-all duration-200 border border-gray-600"
-              >
-                Clear Filters
-              </button>
-            )}
-          </div>
-        </div>
+        {/* Selection Controls */}
+        <SelectionControls
+          selectedCount={selectedMediaIds.size}
+          totalCount={mediaItems.length}
+          onSelectAll={handleSelectAll}
+          onClearSelection={handleClearSelection}
+          onDeleteSelected={handleDeleteSelected}
+        />
 
       </div>
 
