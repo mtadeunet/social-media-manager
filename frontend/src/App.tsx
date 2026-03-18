@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import './App.css';
-import EnhancementTagModal from './components/EnhancementTagModal';
 import MediaVaultGallery from './components/MediaVaultGallery';
 import PostsPage from './pages/Posts';
 
@@ -8,7 +7,6 @@ type View = 'posts' | 'media-vault';
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>('media-vault');
-  const [showTagModal, setShowTagModal] = useState(false);
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#111827' }}>
@@ -70,29 +68,12 @@ const App: React.FC = () => {
                 📝 Posts
               </button>
             </div>
-            <div className="flex items-center">
-              <button
-                onClick={() => setShowTagModal(true)}
-                className="inline-flex items-center px-4 py-2 border border-gray-600 rounded-lg text-sm font-medium text-gray-300 hover:text-white hover:bg-gray-700 transition-colors"
-              >
-                🏷️ Manage Tags
-              </button>
-            </div>
           </div>
         </div>
       </nav>
 
       {/* Content */}
       {currentView === 'media-vault' ? <MediaVaultGallery /> : <PostsPage />}
-
-      {/* Enhancement Tag Modal */}
-      <EnhancementTagModal
-        isOpen={showTagModal}
-        onClose={() => setShowTagModal(false)}
-        onTagsUpdated={() => {
-          // Refresh will be handled by MediaVaultGallery
-        }}
-      />
     </div>
   );
 };

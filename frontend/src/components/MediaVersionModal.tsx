@@ -30,6 +30,18 @@ const MediaVersionModal: React.FC<MediaVersionModalProps> = ({
     }
   }, [isOpen, media]);
 
+  // Handle Escape key to close modal
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && isOpen) {
+        onClose();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   const loadVersions = async () => {
     if (!media) return;
 
@@ -121,9 +133,8 @@ const MediaVersionModal: React.FC<MediaVersionModalProps> = ({
       const tagsToRemove = currentTagIds.filter(id => !newTagIds.includes(id) && id !== 2); // Don't remove original tag (ID 2)
 
       // Separate invalid tags to remove
-      const invalidTagsToRemove = selectedVersion.enhancement_tags
-        .filter(t => t.name === 'invalid' && t.notes && !newTagIds.includes(t.id))
-        .map(t => t.notes || '');
+      const invalidTagsToRemove = selectedVersion.enhancement_tags?.filter(t => t.name === 'invalid' && t.notes && !newTagIds.includes(t.id))
+        .map(t => t.notes || '') || [];
 
       await mediaVaultService.updateVersionTags(selectedVersion.id, {
         tagsToAdd,

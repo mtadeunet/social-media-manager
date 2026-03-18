@@ -9,7 +9,7 @@ export interface MediaVault {
   versions?: MediaVersion[];
   version_count?: number;
   enhancement_tags?: EnhancementTag[];
-  style_tags?: StyleTag[];
+  content_type_tags?: ContentTypeTag[];
   platform_tags?: PlatformTag[];
 }
 
@@ -34,13 +34,17 @@ export interface EnhancementTag {
   notes?: string; // For invalid tags to store the actual tag name (e.g., "v1", "v2")
 }
 
-export interface StyleTag {
+export interface ContentTypeTag {
   id: number;
   name: string;
-  progression_stage: number;
   description?: string;
   color: string;
+  has_phases: boolean;
+  phase_count?: number;
+  parent_id?: number;
+  phase_number?: number;
   created_at: string;
+  phases?: ContentTypeTag[];
 }
 
 export interface PlatformTag {
@@ -54,7 +58,7 @@ export interface PlatformTag {
 export interface MediaVaultFilters {
   searchTerm: string;
   enhancementTags: number[];
-  styleTags: number[];
+  contentTypeTags: number[];
   platformTags: number[];
   dateRange: [Date, Date] | null;
   showUsableOnly: boolean;

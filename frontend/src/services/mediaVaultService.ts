@@ -1,4 +1,4 @@
-import { EnhancementTag, MediaVault, MediaVaultListResponse, PlatformTag, StyleTag } from '../types/mediaVault';
+import { EnhancementTag, MediaVault, MediaVaultListResponse, PlatformTag } from '../types/mediaVault';
 import api from './api';
 
 export const mediaVaultService = {
@@ -114,33 +114,8 @@ export const mediaVaultService = {
     return response.data;
   },
 
-  async listStyleTags(): Promise<StyleTag[]> {
-    const response = await api.get('/tags/style');
-    return response.data;
-  },
-
-  async createStyleTag(
-    name: string,
-    progression_stage: number = 1,
-    description?: string,
-    color?: string
-  ): Promise<StyleTag> {
-    const response = await api.post('/tags/style', { name, progression_stage, description, color });
-    return response.data;
-  },
-
-  async updateStyleTag(
-    tagId: number,
-    updates: { name?: string; progression_stage?: number; description?: string; color?: string }
-  ): Promise<StyleTag> {
-    const response = await api.put(`/tags/style/${tagId}`, updates);
-    return response.data;
-  },
-
-  async deleteStyleTag(tagId: number): Promise<{ message: string }> {
-    const response = await api.delete(`/tags/style/${tagId}`);
-    return response.data;
-  },
+  // Style tag methods removed - replaced by ContentTypeTag system
+  // Use contentTypeService instead for content type management
 
   async listPlatformTags(): Promise<PlatformTag[]> {
     const response = await api.get('/tags/platform');
