@@ -487,7 +487,7 @@ const MediaVaultGallery: React.FC = () => {
                       return (
                         <span
                           key={tag.id}
-                          className="text-[10px] px-2 py-0.5 rounded-full font-medium border"
+                          className="text-[10px] px-2 py-0.5 rounded-md font-medium border"
                           style={{
                             backgroundColor: 'transparent',
                             color: tagColor + ' !important',

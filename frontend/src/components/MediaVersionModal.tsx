@@ -19,6 +19,10 @@ const MediaVersionModal: React.FC<MediaVersionModalProps> = ({
 }) => {
   const [versions, setVersions] = useState<MediaVersion[]>([]);
   const [loading, setLoading] = useState(false);
+  const [showTagSelection, setShowTagSelection] = useState(false);
+  const [selectedVersion, setSelectedVersion] = useState<MediaVersion | null>(null);
+  const [selectedTags, setSelectedTags] = useState<EnhancementTag[]>([]);
+  const [availableTags, setAvailableTags] = useState<EnhancementTag[]>([]);
 
   useEffect(() => {
     if (isOpen && media) {
@@ -64,6 +68,82 @@ const MediaVersionModal: React.FC<MediaVersionModalProps> = ({
     } catch (error) {
       console.error('Failed to delete version:', error);
       alert('Failed to delete version. Please try again.');
+    }
+  };
+
+  const handleEditTags = (version: MediaVersion) => {
+    setSelectedVersion(version);
+
+    // Get current tags for this version
+    const currentTags = version.enhancement_tags || [];
+    setSelectedTags(currentTags);
+
+    // Set available tags (exclude invalid tag and original tag for non-original versions)
+    const hasOriginalTag = currentTags.some(tag => tag.id === 2); // Original tag is now ID 2
+    const validTags = enhancementTags.filter(tag => {
+      if (tag.id === 1) return false; // Invalid tag is ID 1
+      if (tag.id === 2 && !hasOriginalTag) return false; // Original tag is ID 2
+      return true;
+    });
+    setAvailableTags(validTags);
+
+    setShowTagSelection(true);
+  };
+
+  const handleTagToggle = (tag: EnhancementTag) => {
+    setSelectedTags(prev => {
+      const isSelected = prev.some(t => t.id === tag.id);
+
+      // Prevent removing the "original" tag (ID 2)
+      if (isSelected && tag.id === 2) {
+        return prev; // Don't allow removing original tag
+      }
+
+      if (isSelected) {
+        return prev.filter(t => t.id !== tag.id);
+      } else {
+        return [...prev, tag];
+      }
+    });
+  };
+
+  const handleSaveTags = async () => {
+    if (!selectedVersion) return;
+
+    try {
+      setLoading(true);
+
+      // Determine tags to add and remove
+      const currentTagIds = selectedVersion.enhancement_tags?.map(t => t.id) || [];
+      const newTagIds = selectedTags.map(t => t.id);
+
+      const tagsToAdd = newTagIds.filter(id => !currentTagIds.includes(id));
+      const tagsToRemove = currentTagIds.filter(id => !newTagIds.includes(id) && id !== 2); // Don't remove original tag (ID 2)
+
+      // Separate invalid tags to remove
+      const invalidTagsToRemove = selectedVersion.enhancement_tags
+        .filter(t => t.name === 'invalid' && t.notes && !newTagIds.includes(t.id))
+        .map(t => t.notes || '');
+
+      await mediaVaultService.updateVersionTags(selectedVersion.id, {
+        tagsToAdd,
+        tagsToRemove,
+        invalidTagsToRemove
+      });
+
+      // Reload versions to show updated tags
+      await loadVersions();
+
+      // Close the tag selection popup
+      setShowTagSelection(false);
+      setSelectedVersion(null);
+      setSelectedTags([]);
+      setAvailableTags([]);
+    } catch (error) {
+      console.error('Failed to update tags:', error);
+      alert('Failed to update tags. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -158,7 +238,7 @@ const MediaVersionModal: React.FC<MediaVersionModalProps> = ({
                       {/* Version Info */}
                       <div className="text-center">
                         {/* Enhancement Tags */}
-                        <div className="flex flex-wrap gap-1 justify-center">
+                        <div className="flex flex-wrap gap-1 justify-center mb-2">
                           {version.enhancement_tags && version.enhancement_tags.length > 0 &&
                             version.enhancement_tags.map((tag: EnhancementTag) => {
                               const validTag = enhancementTags.find(t => t.id === tag.id);
@@ -171,19 +251,33 @@ const MediaVersionModal: React.FC<MediaVersionModalProps> = ({
                               return (
                                 <span
                                   key={tag.id}
-                                  className="text-[10px] px-2 py-0.5 rounded-full font-medium border"
+                                  className="text-[10px] px-2 py-0.5 rounded-md font-medium border"
                                   style={{
                                     backgroundColor: 'transparent',
                                     color: tagColor + ' !important',
                                     borderColor: tagColor
                                   }}
-                                  title={isValid ? tag.description : `Invalid tag: ${tag.notes || tag.name}`}
+                                  title={isInvalidTag
+                                    ? `Invalid tag: ${tag.notes || tag.name}`
+                                    : tag.description || tag.name
+                                  }
                                 >
                                   {displayName}
+                                  {isInvalidTag && (
+                                    <span className="ml-1 text-xs">⚠️</span>
+                                  )}
                                 </span>
                               );
                             })}
                         </div>
+
+                        {/* Edit Tags Button */}
+                        <button
+                          className="text-xs px-2 py-1 bg-gray-600 hover:bg-gray-700 text-white rounded transition-colors"
+                          onClick={() => handleEditTags(version)}
+                        >
+                          ✏️ Edit Tags
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -249,6 +343,104 @@ const MediaVersionModal: React.FC<MediaVersionModalProps> = ({
           </div>
         )}
       </div>
+
+      {/* Tag Selection Popup */}
+      {showTagSelection && selectedVersion && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-60">
+          <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-bold text-white mb-4">
+              Edit Tags for Version {selectedVersion.id}
+            </h3>
+            <p className="text-gray-300 text-sm mb-4">
+              Select the enhancement tags you want to apply to this version:
+            </p>
+
+            {/* Current Tags Summary */}
+            <div className="mb-4 p-2 bg-gray-700 rounded">
+              <div className="text-xs text-gray-400 mb-1">Current tags:</div>
+              <div className="flex flex-wrap gap-1">
+                {selectedVersion.enhancement_tags?.map(tag => (
+                  <span
+                    key={tag.id}
+                    className="text-[10px] px-2 py-0.5 rounded-md font-medium border"
+                    style={{
+                      backgroundColor: 'transparent',
+                      color: tag.color + ' !important',
+                      borderColor: tag.color
+                    }}
+                  >
+                    {tag.name === 'invalid' && tag.notes ? `invalid - ${tag.notes}` : tag.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* Tag Selection List */}
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {availableTags.map(tag => {
+                const isSelected = selectedTags.some(t => t.id === tag.id);
+                const isLocked = tag.id === 2 && isSelected; // Original tag is ID 2
+                return (
+                  <label
+                    key={tag.id}
+                    className={`flex items-center justify-between p-2 rounded-md transition-colors ${isLocked
+                      ? 'bg-gray-800 cursor-not-allowed opacity-75'
+                      : 'bg-gray-700 hover:bg-gray-600 cursor-pointer'
+                      }`}
+                  >
+                    <div className="flex items-center flex-1">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => handleTagToggle(tag)}
+                        className="mr-3 h-4 w-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                        disabled={loading || isLocked}
+                      />
+                      <span className={`${isLocked ? 'text-gray-400' : 'text-white'}`}>
+                        {tag.name}
+                        {isLocked && (
+                          <span className="ml-2 text-xs text-gray-500">🔒 Protected</span>
+                        )}
+                      </span>
+                    </div>
+                    <span
+                      className="w-4 h-4 rounded-full border-2 flex-shrink-0"
+                      style={{
+                        backgroundColor: tag.color,
+                        borderColor: tag.color,
+                        opacity: isLocked ? 0.5 : 1
+                      }}
+                    />
+                  </label>
+                );
+              })}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="mt-4 flex justify-between">
+              <button
+                className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-md transition-colors"
+                onClick={() => {
+                  setShowTagSelection(false);
+                  setSelectedVersion(null);
+                  setSelectedTags([]);
+                  setAvailableTags([]);
+                }}
+                disabled={loading}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors"
+                onClick={handleSaveTags}
+                disabled={loading}
+              >
+                {loading ? 'Saving...' : 'Save Tags'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -66,6 +66,30 @@ export const mediaVaultService = {
     return response.data;
   },
 
+  async updateVersionTags(
+    versionId: number,
+    options: {
+      tagsToAdd?: number[];
+      tagsToRemove?: number[];
+      invalidTagsToRemove?: string[];
+    }
+  ): Promise<{ message: string }> {
+    const payload: any = {};
+
+    if (options.tagsToAdd) {
+      payload.tags_to_add = options.tagsToAdd;
+    }
+    if (options.tagsToRemove) {
+      payload.tags_to_remove = options.tagsToRemove;
+    }
+    if (options.invalidTagsToRemove) {
+      payload.invalid_tags_to_remove = options.invalidTagsToRemove;
+    }
+
+    const response = await api.put(`/media-vault/${versionId}/tags`, payload);
+    return response.data;
+  },
+
   // Tag operations
   async listEnhancementTags(): Promise<EnhancementTag[]> {
     const response = await api.get('/tags/enhancement');

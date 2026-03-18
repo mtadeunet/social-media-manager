@@ -94,6 +94,10 @@ async def create_enhancement_tag(tag: TagCreate, db: Session = Depends(get_db)):
 async def update_enhancement_tag(tag_id: int, tag: TagUpdate, db: Session = Depends(get_db)):
     """Update an enhancement tag"""
     
+    # Protect invalid (ID 1) and original (ID 2) tags from modification
+    if tag_id in [1, 2]:
+        raise HTTPException(status_code=403, detail="Cannot modify system tags (invalid/original)")
+    
     db_tag = db.query(EnhancementTag).filter(EnhancementTag.id == tag_id).first()
     if not db_tag:
         raise HTTPException(status_code=404, detail="Tag not found")
@@ -125,6 +129,10 @@ async def update_enhancement_tag(tag_id: int, tag: TagUpdate, db: Session = Depe
 @router.delete("/enhancement/{tag_id}")
 async def delete_enhancement_tag(tag_id: int, db: Session = Depends(get_db)):
     """Delete an enhancement tag"""
+    
+    # Protect invalid (ID 1) and original (ID 2) tags from deletion
+    if tag_id in [1, 2]:
+        raise HTTPException(status_code=403, detail="Cannot delete system tags (invalid/original)")
     
     tag = db.query(EnhancementTag).filter(EnhancementTag.id == tag_id).first()
     if not tag:

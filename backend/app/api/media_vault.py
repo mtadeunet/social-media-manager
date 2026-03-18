@@ -449,3 +449,68 @@ async def delete_version(media_id: int, version_id: int, db: Session = Depends(g
     db.commit()
     
     return {"message": "Version deleted successfully"}
+
+
+@router.put("/{version_id}/tags")
+async def update_version_tags(version_id: int, tag_data: dict, db: Session = Depends(get_db)):
+    """Update tags for a specific version - replace/remove old tags and add new ones"""
+    
+    version = db.query(MediaVersion).filter(MediaVersion.id == version_id).first()
+    if not version:
+        raise HTTPException(status_code=404, detail="Version not found")
+    
+    tags_to_add = tag_data.get("tags_to_add", [])
+    tags_to_remove = tag_data.get("tags_to_remove", [])
+    invalid_tags_to_remove = tag_data.get("invalid_tags_to_remove", [])
+    
+    # Remove specified invalid tags (with protection)
+    for invalid_tag_name in invalid_tags_to_remove:
+        # Allow removal of invalid tags - these are meant to be fixed/replaced
+        # Invalid tags (ID 1) are different from original tag protection
+        invalid_tag = db.query(EnhancementTag).filter(EnhancementTag.id == 1).first()
+        if invalid_tag:
+            invalid_association = db.query(VersionEnhancementTag).filter(
+                VersionEnhancementTag.version_id == version_id,
+                VersionEnhancementTag.enhancement_tag_id == invalid_tag.id,
+                VersionEnhancementTag.notes == invalid_tag_name
+            ).first()
+            if invalid_association:
+                db.delete(invalid_association)
+    
+    # Remove specified valid tags (with protection)
+    for tag_id in tags_to_remove:
+        # Protect original tag (ID 2) from being removed
+        if tag_id == 2:
+            continue  # Skip removing original tag
+        
+        association = db.query(VersionEnhancementTag).filter(
+            VersionEnhancementTag.version_id == version_id,
+            VersionEnhancementTag.enhancement_tag_id == tag_id
+        ).first()
+        if association:
+            db.delete(association)
+    
+    # Add new tags (check for duplicates and restrictions)
+    for tag_id in tags_to_add:
+        new_tag = db.query(EnhancementTag).filter(EnhancementTag.id == tag_id).first()
+        if new_tag:
+            # Prevent adding "original" tag (ID 2) to versions that don't already have it
+            if new_tag.id == 2:
+                # Only allow if this version already has the original tag
+                has_original = db.query(VersionEnhancementTag).filter(
+                    VersionEnhancementTag.version_id == version_id,
+                    VersionEnhancementTag.enhancement_tag_id == 2
+                ).first()
+                if not has_original:
+                    continue  # Skip adding original tag
+            
+            existing_association = db.query(VersionEnhancementTag).filter(
+                VersionEnhancementTag.version_id == version_id,
+                VersionEnhancementTag.enhancement_tag_id == tag_id
+            ).first()
+            if not existing_association:
+                version.enhancement_tags.append(new_tag)
+    
+    db.commit()
+    
+    return {"message": "Tags updated successfully"}
