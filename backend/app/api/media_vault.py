@@ -8,14 +8,15 @@ from PIL import Image
 import io
 
 from ..models import MediaVault, MediaVersion, EnhancementTag
+from ..models.associations import VersionEnhancementTag
 from ..models.base import get_db
 
 router = APIRouter(prefix="/media-vault", tags=["media-vault"])
 
 
-def generate_hash_filename(original_name: str, content: bytes) -> str:
-    """Generate {original}_{hash4}.jpg filename"""
-    base_name = os.path.splitext(original_name)[0]
+def generate_hash_filename(base_name: str, content: bytes) -> str:
+    """Generate {base_name}_{hash4}.jpg filename"""
+    # base_name should already be cleaned (no extension, no tags)
     hash_obj = hashlib.sha256(content)
     hash_suffix = hash_obj.hexdigest()[-4:]
     return f"{base_name}_{hash_suffix}.jpg"
@@ -53,6 +54,48 @@ def create_thumbnail(file_path: str, thumbnail_path: str):
         print(f"Warning: Failed to create thumbnail: {e}")
 
 
+def parse_filename_tags(filename: str) -> tuple[str, list[str], list[str]]:
+    """
+    Parse filename to extract base name and enhancement tags.
+    Examples:
+    - "photo_v1_crop" -> ("photo", ["v1", "crop"])
+    - "20260305_143433_000_1c977861d3b507c588a8e6e401d60701-00:00:00.000_v1" -> ("20260305_143433_000_1c977861d3b507c588a8e6e401d60701-00:00:00.000", ["v1"])
+    - "image" -> ("image", [])
+    """
+    # Remove file extension
+    name_without_ext = filename.rsplit('.', 1)[0] if '.' in filename else filename
+    
+    # Split by underscores and look for enhancement tags
+    parts = name_without_ext.split('_')
+    base_parts = []
+    detected_tags = []
+    invalid_tags = []
+    
+    # Known enhancement tags (version tags are not valid enhancement tags)
+    known_tags = {'crop', 'edit', 'detail', 'original'}
+    
+    for part in parts:
+        if part.lower() in known_tags:
+            detected_tags.append(part.lower())
+        elif part.lower().startswith('v') and part.lower()[1:].isdigit():
+            # This is a version tag (v1, v2, etc.) - treat as invalid tag
+            invalid_tags.append(part.lower())
+        else:
+            base_parts.append(part)
+    
+    base_name = '_'.join(base_parts)
+    return base_name, detected_tags, invalid_tags
+
+
+def get_tag_notes(version_id: int, tag_id: int, db: Session) -> str:
+    """Get notes for a specific version-tag association"""
+    association = db.query(VersionEnhancementTag).filter(
+        VersionEnhancementTag.version_id == version_id,
+        VersionEnhancementTag.enhancement_tag_id == tag_id
+    ).first()
+    return association.notes if association else None
+
+
 @router.post("/upload")
 async def upload_media(
     file: UploadFile = File(...),
@@ -66,7 +109,20 @@ async def upload_media(
     
     content = await file.read()
     processed_content = convert_to_jpg(content, file.filename)
-    new_filename = generate_hash_filename(file.filename, processed_content)
+    
+    # Parse filename to extract base name and detected enhancement tags
+    if file.filename:
+        base_filename, detected_tags, invalid_tags = parse_filename_tags(file.filename)
+    else:
+        base_filename = "unnamed"
+        detected_tags = []
+        invalid_tags = []
+    
+    # Generate storage filename using base filename (without tags)
+    new_filename = generate_hash_filename(base_filename, processed_content)
+    
+    # Check if this is a version of an existing media item
+    existing_media = db.query(MediaVault).filter(MediaVault.base_filename == base_filename).first()
     
     media_dir = f"media/vault/{datetime.now().strftime('%Y/%m')}"
     os.makedirs(media_dir, exist_ok=True)
@@ -80,15 +136,19 @@ async def upload_media(
     create_thumbnail(file_path, thumbnail_path)
     
     file_type = "video" if file.content_type.startswith("video") else "image"
-    base_filename = file.filename.split('.')[0] if file.filename else "unnamed"
     
-    media_vault = MediaVault(
-        base_filename=base_filename,
-        file_type=file_type,
-        is_usable=False
-    )
-    db.add(media_vault)
-    db.flush()
+    if existing_media:
+        # This is a version of existing media
+        media_vault = existing_media
+    else:
+        # This is a new original media item
+        media_vault = MediaVault(
+            base_filename=base_filename,
+            file_type=file_type,
+            is_usable=False
+        )
+        db.add(media_vault)
+        db.flush()
     
     media_version = MediaVersion(
         media_vault_id=media_vault.id,
@@ -99,12 +159,41 @@ async def upload_media(
     )
     db.add(media_version)
     
+    # Add "original" tag to first version of a media item
+    if not existing_media:
+        original_tag = db.query(EnhancementTag).filter(EnhancementTag.name == 'original').first()
+        if original_tag:
+            media_version.enhancement_tags.append(original_tag)
+    
+    # Add manually selected tags
     if enhancement_tags:
         tag_ids = [int(tag_id.strip()) for tag_id in enhancement_tags.split(',') if tag_id.strip()]
         for tag_id in tag_ids:
             tag = db.query(EnhancementTag).filter(EnhancementTag.id == tag_id).first()
             if tag:
                 media_version.enhancement_tags.append(tag)
+    
+    # Add detected tags from filename
+    for detected_tag in detected_tags:
+        tag = db.query(EnhancementTag).filter(EnhancementTag.name == detected_tag).first()
+        if tag:
+            media_version.enhancement_tags.append(tag)
+    
+    db.commit()
+    
+    # Add invalid tags (version tags) with invalid tag ID and notes
+    # This must be done after commit so media_version.id is available
+    if invalid_tags:
+        invalid_tag = db.query(EnhancementTag).filter(EnhancementTag.name == 'invalid').first()
+        if invalid_tag:
+            for invalid_tag_name in invalid_tags:
+                # Create the association with notes
+                association = VersionEnhancementTag(
+                    version_id=media_version.id,
+                    enhancement_tag_id=invalid_tag.id,
+                    notes=invalid_tag_name
+                )
+                db.add(association)
     
     db.commit()
     
@@ -141,23 +230,56 @@ async def list_media(
     
     media_items = query.offset(skip).limit(limit).all()
     
+    result = []
+    for media in media_items:
+        # Get latest version by upload date for thumbnail and basic info
+        latest_version = None
+        if media.versions:
+            latest_version = sorted(media.versions, key=lambda v: v.upload_date, reverse=True)[0]
+        
+        # Aggregate ALL tags from ALL versions
+        all_tags = []
+        seen_tags = set()  # Avoid duplicate normal tags
+        
+        for version in media.versions:
+            for tag in version.enhancement_tags:
+                if tag.name == 'invalid':
+                    # For invalid tags, get notes and add as separate entries
+                    notes = get_tag_notes(version.id, tag.id, db)
+                    if notes:
+                        all_tags.append({
+                            "id": tag.id,
+                            "name": tag.name,
+                            "color": tag.color,
+                            "notes": notes
+                        })
+                elif tag.id not in seen_tags:
+                    # For normal tags, only add once
+                    all_tags.append({
+                        "id": tag.id,
+                        "name": tag.name,
+                        "color": tag.color,
+                        "notes": None
+                    })
+                    seen_tags.add(tag.id)
+        
+        result.append({
+            "id": media.id,
+            "base_filename": media.base_filename,
+            "file_type": media.file_type,
+            "is_usable": media.is_usable,
+            "created_at": media.created_at.isoformat(),
+            "latest_version": {
+                "id": latest_version.id if latest_version else None,
+                "filename": latest_version.filename if latest_version else None,
+                "thumbnail_path": latest_version.thumbnail_path if latest_version else None,
+                "enhancement_tags": all_tags
+            } if latest_version else None,
+            "version_count": len(media.versions)
+        })
+    
     return {
-        "media": [
-            {
-                "id": media.id,
-                "base_filename": media.base_filename,
-                "file_type": media.file_type,
-                "is_usable": media.is_usable,
-                "created_at": media.created_at.isoformat(),
-                "latest_version": {
-                    "id": media.latest_version.id if media.latest_version else None,
-                    "filename": media.latest_version.filename if media.latest_version else None,
-                    "thumbnail_path": media.latest_version.thumbnail_path if media.latest_version else None
-                } if media.latest_version else None,
-                "version_count": len(media.versions)
-            }
-            for media in media_items
-        ],
+        "media": result,
         "total": len(media_items),
         "skip": skip,
         "limit": limit
@@ -191,12 +313,13 @@ async def get_media(media_id: int, db: Session = Depends(get_db)):
                     {
                         "id": tag.id,
                         "name": tag.name,
-                        "color": tag.color
+                        "color": tag.color,
+                        "notes": get_tag_notes(version.id, tag.id, db) if tag.name == 'invalid' else None
                     }
                     for tag in version.enhancement_tags
                 ]
             }
-            for version in sorted(media.versions, key=lambda v: v.upload_date, reverse=True)
+            for version in sorted(media.versions, key=lambda v: v.upload_date)
         ]
     }
 

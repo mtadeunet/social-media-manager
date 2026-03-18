@@ -1,5 +1,5 @@
+import { EnhancementTag, MediaVault, MediaVaultListResponse, PlatformTag, StyleTag } from '../types/mediaVault';
 import api from './api';
-import { MediaVault, MediaVaultListResponse, EnhancementTag, StyleTag, PlatformTag } from '../types/mediaVault';
 
 export const mediaVaultService = {
   // Media Vault operations
@@ -44,11 +44,11 @@ export const mediaVaultService = {
   },
 
   // Version operations
-  async addVersion(mediaId: number, file: File, enhancementTags?: number[]): Promise<any> {
+  async addVersion(mediaId: number, file: File, enhancementTags?: string): Promise<any> {
     const formData = new FormData();
     formData.append('file', file);
-    if (enhancementTags && enhancementTags.length > 0) {
-      formData.append('enhancement_tags', enhancementTags.join(','));
+    if (enhancementTags) {
+      formData.append('enhancement_tags', enhancementTags);
     }
     const response = await api.post(`/media-vault/${mediaId}/versions`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
@@ -58,6 +58,11 @@ export const mediaVaultService = {
 
   async deleteVersion(mediaId: number, versionId: number): Promise<{ message: string }> {
     const response = await api.delete(`/media-vault/${mediaId}/versions/${versionId}`);
+    return response.data;
+  },
+
+  async getMediaVersions(mediaId: number): Promise<{ versions: any[] }> {
+    const response = await api.get(`/media-vault/${mediaId}`);
     return response.data;
   },
 

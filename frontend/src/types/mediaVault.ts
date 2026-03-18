@@ -31,6 +31,7 @@ export interface EnhancementTag {
   description?: string;
   color: string;
   created_at: string;
+  notes?: string; // For invalid tags to store the actual tag name (e.g., "v1", "v2")
 }
 
 export interface StyleTag {

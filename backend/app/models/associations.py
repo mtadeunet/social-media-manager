@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, ForeignKey, DateTime
+from sqlalchemy import Column, Integer, ForeignKey, DateTime, String
 from datetime import datetime
 
 from .base import Base
@@ -37,6 +37,7 @@ class VersionEnhancementTag(Base):
     version_id = Column(Integer, ForeignKey("media_versions.id"), primary_key=True)
     enhancement_tag_id = Column(Integer, ForeignKey("enhancement_tags.id"), primary_key=True)
     applied_sequence = Column(Integer, default=0)
+    notes = Column(String(255), nullable=True)  # Store invalid tag names here
 
 
 # Post to Media-Vault References (Many-to-Many)

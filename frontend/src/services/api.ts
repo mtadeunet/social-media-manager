@@ -1,10 +1,8 @@
 import axios from 'axios';
-import { Post, PostList, FileValidationRequest, FileValidationResponse } from '../types/post';
-
-const API_BASE_URL = 'http://localhost:8000/api';
+import { FileValidationRequest, FileValidationResponse, Post, PostList } from '../types/post';
 
 const api = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: '/api',
   timeout: 10000,
 });
 
@@ -83,7 +81,7 @@ export const mediaService = {
   promoteMedia: async (mediaId: number, targetStage: string): Promise<void> => {
     const formData = new FormData();
     formData.append('target_stage', targetStage);
-    
+
     await api.post(`/media/media/${mediaId}/promote`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',

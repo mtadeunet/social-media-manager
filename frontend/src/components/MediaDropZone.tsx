@@ -159,14 +159,24 @@ const MediaDropZone: React.FC<MediaDropZoneProps> = ({ enhancementTags, onUpload
         } else {
           throw new Error('Upload failed');
         }
-      } catch (error) {
+      } catch (error: any) {
         clearInterval(progressInterval);
+
+        let errorMessage = 'Upload failed';
+        if (error.response?.status === 409) {
+          errorMessage = 'Duplicate file: A file with identical content already exists';
+        } else if (error.response?.data?.detail) {
+          errorMessage = error.response.data.detail;
+        } else if (error instanceof Error) {
+          errorMessage = error.message;
+        }
+
         setMediaSlots(prev => prev.map(s =>
           s.id === slot.id ? {
             ...s,
             status: 'failed',
             progress: 0,
-            error: error instanceof Error ? error.message : 'Upload failed'
+            error: errorMessage
           } : s
         ));
       }
