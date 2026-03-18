@@ -3,10 +3,10 @@ from .post import Post
 from .media import MediaFile
 from .media_vault import MediaVault
 from .media_version import MediaVersion
-from .tags import EnhancementTag, StyleTag, PlatformTag
+from .tags import EnhancementTag, ContentTypeTag, PlatformTag, SystemSetting
 from .associations import (
     MediaEnhancementTag,
-    MediaStyleTag,
+    MediaContentTypeTag,
     MediaPlatformTag,
     VersionEnhancementTag,
     PostMediaReference
@@ -16,7 +16,7 @@ __all__ = [
     "Base", "engine", "SessionLocal", "get_db",
     "Post", "MediaFile",
     "MediaVault", "MediaVersion",
-    "EnhancementTag", "StyleTag", "PlatformTag",
-    "MediaEnhancementTag", "MediaStyleTag", "MediaPlatformTag",
+    "EnhancementTag", "ContentTypeTag", "PlatformTag", "SystemSetting",
+    "MediaEnhancementTag", "MediaContentTypeTag", "MediaPlatformTag",
     "VersionEnhancementTag", "PostMediaReference"
 ]

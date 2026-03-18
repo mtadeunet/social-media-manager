@@ -17,7 +17,7 @@ class MediaVault(Base):
     # Relationships
     versions = relationship("MediaVersion", back_populates="media_vault", cascade="all, delete-orphan")
     enhancement_tags = relationship("EnhancementTag", secondary="media_enhancement_tags", back_populates="media_vaults")
-    style_tags = relationship("StyleTag", secondary="media_style_tags", back_populates="media_vaults")
+    content_type_tags = relationship("ContentTypeTag", secondary="media_content_type_tags", back_populates="media_vaults")
     platform_tags = relationship("PlatformTag", secondary="media_platform_tags", back_populates="media_vaults")
     posts = relationship("Post", secondary="post_media_references", back_populates="referenced_media")
     

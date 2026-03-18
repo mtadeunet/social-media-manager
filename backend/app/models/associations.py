@@ -12,13 +12,13 @@ class MediaEnhancementTag(Base):
     applied_date = Column(DateTime, default=datetime.utcnow)
 
 
-# Media-Vault to Style Tags (Many-to-Many)
-class MediaStyleTag(Base):
-    __tablename__ = "media_style_tags"
+# Media-Vault to Content Type Tags (Many-to-Many)
+class MediaContentTypeTag(Base):
+    __tablename__ = "media_content_type_tags"
     
     media_vault_id = Column(Integer, ForeignKey("media_vault.id"), primary_key=True)
-    style_tag_id = Column(Integer, ForeignKey("style_tags.id"), primary_key=True)
-    progression_stage = Column(Integer, default=1)
+    content_type_tag_id = Column(Integer, ForeignKey("content_type_tags.id"), primary_key=True)
+    applied_date = Column(DateTime, default=datetime.utcnow)
 
 
 # Media-Vault to Platform Tags (Many-to-Many)

@@ -629,5 +629,31 @@ src/
 **Milestone 2**: Post-Centric Workflow (Complete ✅)
 **Latest Commit**: `cb2dd21` - Implement complete invalid tag system with notes and UI improvements
 
-## 🎯 Next Steps: Milestone 3 - Collection Types & Phases
-Ready to begin implementation of collection-based organization system with 5-phase progression.
+## 🎯 Milestone 3: Content Type Tags & Progression System
+
+### Overview
+Transform the Style Tag system into a comprehensive Content Type tagging system with optional progression phases, enabling users to categorize media by content type (e.g., Travel, Fashion, Food) with configurable phase-based progression.
+
+### 📋 Detailed Plan
+**[Content Type Tag Management System Plan](.windsurf/plans/content-type-tags-cc3abf.md)**
+
+### Key Features
+- **Content Type Tags**: Rename and enhance Style Tags to Content Type Tags
+- **Optional Progression Phases**: Each content type can have configurable phases (e.g., "Travel - Local", "Travel - Another Country", "Travel - Another Continent")
+- **Global Default Settings**: Configurable default phase count for new content types
+- **Phase Customization**: Custom names, descriptions, and colors for each phase
+- **Visual Distinction**: Filled tag style (color background, white text) separate from enhancement tags
+- **Stacked Gallery Layout**: Organized display - Thumbnail → Name → Enhancement Tags → Content Type Tags → Platform Tags
+
+### Implementation Status
+- [ ] Database schema migration (style_tags → content_type_tags)
+- [ ] Backend API endpoints for content type management
+- [ ] Global settings system for default phase count
+- [ ] Frontend ContentTypeModal component
+- [ ] Media gallery content type assignment UI
+- [ ] Stacked visual layout implementation
+- [ ] Phase management and editing
+
+### Target Completion
+**Estimated**: 10-12 hours of development
+**Priority**: High - Foundation for content organization system
