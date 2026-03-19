@@ -1,3 +1,5 @@
+import { ContentType } from './mediaVault';
+
 export interface FilterState {
   searchTerm: string;
   showUsableOnly: boolean;
@@ -18,4 +20,8 @@ export interface SelectionControlsProps {
   onSelectAll: () => void;
   onClearSelection: () => void;
   onDeleteSelected: () => void;
+  contentTypes?: ContentType[];
+  selectedMediaIds?: Set<number>;
+  mediaContentTypes?: Map<number, ContentType[]>;
+  onToggleContentType?: (contentTypeId: number, add: boolean) => void;
 }

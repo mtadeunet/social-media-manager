@@ -1,8 +1,8 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { contentTypeService, ContentTypeTag } from '../services/contentTypeService';
+import React, { useCallback, useEffect, useState, useMemo } from 'react';
+import { contentTypeService } from '../services/contentTypeService';
 import { mediaVaultService } from '../services/mediaVaultService';
 import type { FilterState } from '../types/filters';
-import { EnhancementTag, MediaVault } from '../types/mediaVault';
+import { EnhancementTag, MediaVault, ContentType } from '../types/mediaVault';
 import FilterBar from './FilterBar';
 import MediaDropZone from './MediaDropZone';
 import MediaVersionModal from './MediaVersionModal';
@@ -34,7 +34,7 @@ const MediaVaultGallery: React.FC<MediaVaultGalleryProps> = ({
 
   // Tags state
   const [enhancementTags, setEnhancementTags] = useState<EnhancementTag[]>([]);
-  const [contentTypeTags, setContentTypeTags] = useState<ContentTypeTag[]>([]);
+  const [contentTypes, setContentTypes] = useState<ContentType[]>([]);
 
   // Modal state
   const [selectedMedia, setSelectedMedia] = useState<MediaVault | null>(null);
@@ -86,16 +86,46 @@ const MediaVaultGallery: React.FC<MediaVaultGalleryProps> = ({
 
   const loadTags = async () => {
     try {
-      const [enhancement, contentTypes] = await Promise.all([
+      const [enhancement, contentTypesData] = await Promise.all([
         mediaVaultService.listEnhancementTags(),
         contentTypeService.listContentTypes()
       ]);
       setEnhancementTags(enhancement);
-      setContentTypeTags(contentTypes);
+      
+      // Map ContentTypeTag to ContentType
+      const mappedContentTypes: ContentType[] = contentTypesData.map(ct => ({
+        id: ct.id,
+        name: ct.name,
+        description: ct.description || undefined,
+        color: ct.color,
+        icon: ct.icon || undefined,
+        hasPhases: ct.hasPhases,
+        phaseNumber: ct.phaseNumber || undefined,
+        phaseName: ct.phaseName || undefined,
+        phaseColor: ct.phaseColor || undefined,
+        isPhase: ct.isPhase,
+        isParent: ct.isParent,
+        displayName: ct.displayName,
+        effectiveColor: ct.effectiveColor,
+        parentContentTypeId: ct.parentContentTypeId || undefined,
+        createdAt: ct.createdAt
+      }));
+      setContentTypes(mappedContentTypes);
     } catch (error) {
       console.error('Failed to load tags:', error);
     }
   };
+
+  // Create a map of media content types for tri-state checkboxes
+  const mediaContentTypesMap = useMemo(() => {
+    const map = new Map<number, ContentType[]>();
+    mediaItems.forEach(media => {
+      if (media.contentTypes) {
+        map.set(media.id, media.contentTypes);
+      }
+    });
+    return map;
+  }, [mediaItems]);
 
   // Selection handlers
   const handleMediaClick = (mediaId: number, index: number, event: React.MouseEvent) => {
@@ -142,6 +172,54 @@ const MediaVaultGallery: React.FC<MediaVaultGalleryProps> = ({
   const handleClearSelection = () => {
     setSelectedMediaIds(new Set());
     setLastSelectedIndex(null);
+  };
+
+  const handleToggleContentType = async (contentTypeId: number, add: boolean) => {
+    if (selectedMediaIds.size === 0) return;
+
+    try {
+      // For each selected media, determine its new content types
+      const mediaToContentTypes = new Map<number, number[]>();
+      
+      selectedMediaIds.forEach(mediaId => {
+        const currentTypes = mediaContentTypesMap.get(mediaId) || [];
+        const currentTypeIds = currentTypes.map(ct => ct.id);
+        
+        let newTypeIds: number[];
+        if (add) {
+          // Add the content type if not already present
+          newTypeIds = currentTypeIds.includes(contentTypeId) 
+            ? currentTypeIds 
+            : [...currentTypeIds, contentTypeId];
+        } else {
+          // Remove the content type
+          newTypeIds = currentTypeIds.filter(id => id !== contentTypeId);
+        }
+        
+        mediaToContentTypes.set(mediaId, newTypeIds);
+      });
+
+      // Group media by their final content type sets for efficient batch updates
+      const contentTypesToMedia = new Map<string, number[]>();
+      mediaToContentTypes.forEach((typeIds, mediaId) => {
+        const key = typeIds.sort().join(',');
+        if (!contentTypesToMedia.has(key)) {
+          contentTypesToMedia.set(key, []);
+        }
+        contentTypesToMedia.get(key)!.push(mediaId);
+      });
+
+      // Update each group of media with the same content types
+      for (const [typeIdsStr, mediaIds] of contentTypesToMedia) {
+        const typeIds = typeIdsStr ? typeIdsStr.split(',').map(Number) : [];
+        await mediaVaultService.batchUpdateContentTypes(mediaIds, typeIds);
+      }
+
+      // Refresh media to show updated tags
+      loadMedia();
+    } catch (error) {
+      console.error('Failed to toggle content type:', error);
+    }
   };
 
   const handleDeleteMedia = async (mediaId: number) => {
@@ -252,6 +330,10 @@ const MediaVaultGallery: React.FC<MediaVaultGalleryProps> = ({
           onSelectAll={handleSelectAll}
           onClearSelection={handleClearSelection}
           onDeleteSelected={handleDeleteSelected}
+          contentTypes={contentTypes}
+          selectedMediaIds={selectedMediaIds}
+          mediaContentTypes={mediaContentTypesMap}
+          onToggleContentType={handleToggleContentType}
         />
 
       </div>
@@ -420,18 +502,43 @@ const MediaVaultGallery: React.FC<MediaVaultGalleryProps> = ({
               {media.contentTypes && media.contentTypes.length > 0 && (
                 <div className="mt-1 px-1 flex flex-wrap gap-1 justify-center">
                   {media.contentTypes.map((tag: any) => {
-                    const validTag = contentTypeTags.find(t => t.id === tag.id);
-                    const tagColor = validTag ? tag.color : '#6b7280';
+                    // The tag from media already has the color, no need to look it up
+                    const tagColor = tag.color || '#ff0000';
+                    
+                    // Function to determine if text should be white or black based on background color
+                    const getContrastColor = (hexColor: string) => {
+                      // Remove # if present
+                      const color = hexColor.replace('#', '');
+                      
+                      // Convert to RGB
+                      const r = parseInt(color.substr(0, 2), 16);
+                      const g = parseInt(color.substr(2, 2), 16);
+                      const b = parseInt(color.substr(4, 2), 16);
+                      
+                      // Calculate luminance (perceived brightness)
+                      const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+                      
+                      // Return black for light backgrounds, white for dark backgrounds
+                      return luminance > 0.5 ? '#000000' : '#ffffff';
+                    };
+                    
+                    const textColor = getContrastColor(tagColor);
+                    
                     return (
                       <span
                         key={tag.id}
-                        className="text-[10px] px-2 py-0.5 rounded-md font-medium border"
+                        className="content-type-tag"
                         style={{
-                          backgroundColor: tagColor + ' !important',
-                          color: '#ffffff !important',
-                          borderColor: tagColor
-                        }}
-                        title={validTag ? tag.description : 'Content type tag'}
+                          '--tag-color': tagColor,
+                          '--tag-text-color': textColor,
+                          display: 'inline-block',
+                          fontSize: '10px',
+                          padding: '2px 8px',
+                          borderRadius: '6px',
+                          fontWeight: '500',
+                          margin: '2px'
+                        } as React.CSSProperties}
+                        title={tag.description || 'Content type tag'}
                       >
                         {tag.name}
                       </span>

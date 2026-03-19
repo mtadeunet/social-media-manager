@@ -298,3 +298,9 @@ body {
     grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
   }
 }
+
+/* Content type tag styles */
+.content-type-tag {
+  background-color: var(--tag-color, #ff0000) !important;
+  color: var(--tag-text-color, #ffffff) !important;
+}

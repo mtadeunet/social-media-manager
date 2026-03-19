@@ -1,12 +1,17 @@
 import React from 'react';
 import type { SelectionControlsProps } from '../types/filters';
+import MultiSelectComboBox from './MultiSelectComboBox';
 
 const SelectionControls: React.FC<SelectionControlsProps> = ({
   selectedCount,
   totalCount,
   onSelectAll,
   onClearSelection,
-  onDeleteSelected
+  onDeleteSelected,
+  contentTypes = [],
+  selectedMediaIds,
+  mediaContentTypes,
+  onToggleContentType
 }) => {
   if (selectedCount === 0) {
     return (
@@ -28,9 +33,9 @@ const SelectionControls: React.FC<SelectionControlsProps> = ({
 
   return (
     <div className="bg-gray-800 rounded-lg px-4 py-2 mb-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span className="text-white text-sm">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3 flex-1">
+          <span className="text-white text-sm whitespace-nowrap">
             {selectedCount} of {totalCount} selected
           </span>
           <button
@@ -47,12 +52,25 @@ const SelectionControls: React.FC<SelectionControlsProps> = ({
           </button>
         </div>
         
-        <button
-          onClick={onDeleteSelected}
-          className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded-lg border border-red-700 shadow-sm hover:shadow-md transition-all duration-200 font-medium"
-        >
-          Delete ({selectedCount})
-        </button>
+        <div className="flex items-center gap-3">
+          {/* Content Types Multi-Select */}
+          {onToggleContentType && contentTypes.length > 0 && (
+            <MultiSelectComboBox
+              options={contentTypes}
+              selectedMediaIds={selectedMediaIds}
+              mediaContentTypes={mediaContentTypes}
+              onToggleContentType={onToggleContentType}
+              placeholder="Content type"
+            />
+          )}
+          
+          <button
+            onClick={onDeleteSelected}
+            className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded-lg border border-red-700 shadow-sm hover:shadow-md transition-all duration-200 font-medium whitespace-nowrap"
+          >
+            Delete ({selectedCount})
+          </button>
+        </div>
       </div>
     </div>
   );
