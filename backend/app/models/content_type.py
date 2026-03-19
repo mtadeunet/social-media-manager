@@ -10,34 +10,24 @@ from .base import Base
 
 
 class ContentType(Base):
-    __tablename__ = "content_type"
+    __tablename__ = "content_types"
     
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False)
     description = Column(Text)
     color = Column(String(7), default="#3b82f6")
     icon = Column(String(50))
-    
-    # Legacy field for backward compatibility
-    progression_stage = Column(Integer, default=1)
-    
-    # Phase properties
     has_phases = Column(Boolean, default=False)
-    phase_number = Column(Integer, nullable=True)  # NULL for parent/main content type
-    phase_name = Column(String(100), nullable=True)  # NULL for parent/main content type
-    phase_color = Column(String(7), nullable=True)  # Individual phase color
-    
-    # Parent-child relationship
-    parent_content_type_id = Column(Integer, ForeignKey("content_type.id"), nullable=True)
+    phase_number = Column(Integer)
+    phase_name = Column(String(100))
+    phase_color = Column(String(7))
+    parent_content_type_id = Column(Integer, ForeignKey("content_types.id"))
+    created_at = Column(DateTime, default=datetime.utcnow)
     
     # Relationships
     parent = relationship("ContentType", remote_side=[id], back_populates="phases")
     phases = relationship("ContentType", back_populates="parent", cascade="all, delete-orphan")
-    
-    # Media relationships
     media_vaults = relationship("MediaVault", secondary="media_content_type_tags", back_populates="content_types")
-    
-    created_at = Column(DateTime, default=datetime.utcnow)
     
     @property
     def is_phase(self) -> bool:

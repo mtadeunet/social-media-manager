@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import select
 from typing import List, Optional
 import os
 import hashlib
@@ -7,12 +8,13 @@ from datetime import datetime
 from PIL import Image
 import io
 
-from ..models import MediaVault, MediaVersion, EnhancementTag
-from ..models.associations import VersionEnhancementTag
+from ..models import MediaVault, MediaVersion, EnhancementTag, ContentType
+from ..models.associations import VersionEnhancementTag, MediaContentTypeTag
 from ..models.base import get_db
 from ..schemas.media_vault import (
     MediaVaultResponse, MediaVaultListResponse, MediaVersionResponse,
-    EnhancementTagResponse, MediaUploadResponse
+    EnhancementTagResponse, MediaUploadResponse, ContentTypesUpdateRequest,
+    BatchContentTypesUpdateRequest
 )
 
 router = APIRouter(prefix="/media-vault", tags=["media-vault"])
@@ -247,27 +249,44 @@ async def list_media(
         
         for version in media.versions:
             for tag in version.enhancement_tags:
-                if tag.name == 'invalid':
-                    # For invalid tags, get notes and add as separate entries
-                    notes = get_tag_notes(version.id, tag.id, db)
-                    if notes:
-                        all_tags.append(EnhancementTagResponse(
-                            id=tag.id,
-                            name=tag.name,
-                            color=tag.color,
-                            created_at=tag.created_at.isoformat(),
-                            notes=notes
-                        ))
-                elif tag.id not in seen_tags:
-                    # For normal tags, only add once
+                if tag.id not in seen_tags:
                     all_tags.append(EnhancementTagResponse(
                         id=tag.id,
                         name=tag.name,
+                        description=tag.description,
                         color=tag.color,
                         created_at=tag.created_at.isoformat(),
-                        notes=None
+                        notes=get_tag_notes(version.id, tag.id, db)
                     ))
                     seen_tags.add(tag.id)
+        
+        # Get content types using ContentTypeTag model
+        content_types = []
+        ct_ids = db.query(MediaContentTypeTag.content_type_id).filter(
+            MediaContentTypeTag.media_vault_id == media.id
+        ).all()
+        ct_ids_list = [ct_id[0] for ct_id in ct_ids]
+        
+        if ct_ids_list:
+            cts = db.query(ContentType).filter(ContentType.id.in_(ct_ids_list)).all()
+            for ct in cts:
+                content_types.append({
+                    "id": ct.id,
+                    "name": ct.name,
+                    "description": ct.description,
+                    "color": ct.color,
+                    "icon": ct.icon,
+                    "hasPhases": ct.has_phases,
+                    "phaseNumber": ct.phase_number,
+                    "phaseName": ct.phase_name,
+                    "phaseColor": ct.phase_color,
+                    "isPhase": ct.parent_content_type_id is not None,
+                    "isParent": ct.has_phases and ct.parent_content_type_id is None,
+                    "displayName": ct.name,
+                    "effectiveColor": ct.color,
+                    "parentContentTypeId": ct.parent_content_type_id,
+                    "createdAt": ct.created_at.isoformat()
+                })
         
         # Create latest version response
         latest_version_response = None
@@ -293,7 +312,8 @@ async def list_media(
             updated_at=media.updated_at.isoformat(),
             latest_version=latest_version_response,
             version_count=len(media.versions),
-            enhancement_tags=all_tags
+            enhancement_tags=all_tags,
+            content_types=content_types
         ))
     
     return MediaVaultListResponse(
@@ -539,3 +559,60 @@ async def update_version_tags(version_id: int, tag_data: dict, db: Session = Dep
     db.commit()
     
     return {"message": "Tags updated successfully"}
+
+
+@router.put("/{media_id}/content-types")
+def update_media_content_types(
+    media_id: int,
+    content_types: ContentTypesUpdateRequest,
+    db: Session = Depends(get_db)
+):
+    """Update content types for a media item"""
+    media = db.query(MediaVault).filter(MediaVault.id == media_id).first()
+    if not media:
+        raise HTTPException(status_code=404, detail="Media not found")
+    
+    # Clear existing content types
+    db.query(MediaContentTypeTag).filter(
+        MediaContentTypeTag.media_vault_id == media_id
+    ).delete()
+    
+    # Add new content types
+    for ct_id in content_types.contentTypes:
+        content_type = db.query(ContentType).filter(ContentType.id == ct_id).first()
+        if content_type:
+            media.content_types.append(content_type)
+    
+    db.commit()
+    return {"message": "Content types updated successfully"}
+
+
+@router.post("/batch-update-content-types")
+def batch_update_content_types(
+    data: BatchContentTypesUpdateRequest,
+    db: Session = Depends(get_db)
+):
+    """Update content types for multiple media items"""
+    if not data.mediaIds:
+        raise HTTPException(status_code=400, detail="No media IDs provided")
+    
+    # Get content types
+    content_types = db.query(ContentType).filter(
+        ContentType.id.in_(data.contentTypes)
+    ).all()
+    
+    # Update each media item
+    for media_id in data.mediaIds:
+        media = db.query(MediaVault).filter(MediaVault.id == media_id).first()
+        if media:
+            # Clear existing content types
+            db.query(MediaContentTypeTag).filter(
+                MediaContentTypeTag.media_vault_id == media_id
+            ).delete()
+            
+            # Add new content types
+            for content_type in content_types:
+                media.content_types.append(content_type)
+    
+    db.commit()
+    return {"message": f"Content types updated for {len(data.mediaIds)} media items"}

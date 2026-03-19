@@ -43,6 +43,17 @@ export const mediaVaultService = {
     return response.data;
   },
 
+  async updateMediaContentTypes(mediaId: number, data: { contentTypes: number[] }): Promise<{ message: string }> {
+    const response = await api.put(`/media-vault/${mediaId}/content-types`, data);
+    return response.data;
+  },
+
+  // Batch update content types for multiple media
+  async batchUpdateContentTypes(mediaIds: number[], contentTypes: number[]): Promise<{ message: string }> {
+    const response = await api.post('/media-vault/batch-update-content-types', { mediaIds, contentTypes });
+    return response.data;
+  },
+
   // Version operations
   async addVersion(mediaId: number, file: File, enhancementTags?: string): Promise<any> {
     const formData = new FormData();

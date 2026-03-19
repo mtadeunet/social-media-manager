@@ -35,7 +35,7 @@ async def list_content_types(
     else:
         # Return flat list
         content_types = service.get_all_content_types(include_phases=include_phases)
-        return [ContentTypeResponse.model_validate(ct) for ct in content_types]
+        return [ContentTypeResponse.model_validate(ct.to_dict()) for ct in content_types]
 
 
 @router.get("/{content_type_id}", response_model=ContentTypeResponse)
@@ -55,7 +55,7 @@ async def get_content_type(
     if not content_type:
         raise HTTPException(status_code=404, detail="Content type not found")
     
-    return ContentTypeResponse.model_validate(content_type)
+    return ContentTypeResponse.model_validate(content_type.to_dict())
 
 
 @router.post("/", response_model=ContentTypeResponse)

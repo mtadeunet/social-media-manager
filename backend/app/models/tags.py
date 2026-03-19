@@ -21,29 +21,6 @@ class EnhancementTag(Base):
         return f"<EnhancementTag(id={self.id}, name={self.name})>"
 
 
-class ContentTypeTag(Base):
-    __tablename__ = "content_type_tags"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, unique=True, nullable=False)
-    description = Column(Text, nullable=True)
-    color = Column(String, default="#3b82f6")
-    has_phases = Column(Boolean, default=False)
-    phase_count = Column(Integer, nullable=True)  # Only used for base types with phases
-    parent_id = Column(Integer, ForeignKey("content_type_tags.id"), nullable=True)  # Self-referencing
-    phase_number = Column(Integer, nullable=True)  # Which phase this represents (1, 2, 3, etc.)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    
-    # Relationships
-    phases = relationship("ContentTypeTag", backref="parent_content_type", remote_side=[id])
-    
-    def __repr__(self):
-        if self.parent_id:
-            return f"<ContentTypeTag(id={self.id}, name={self.name}, phase={self.phase_number})>"
-        else:
-            return f"<ContentTypeTag(id={self.id}, name={self.name}, phases={self.phase_count})>"
-
-
 class PlatformTag(Base):
     __tablename__ = "platform_tags"
     

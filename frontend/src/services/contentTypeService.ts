@@ -3,9 +3,17 @@ export interface ContentTypeTag {
   name: string;
   description: string | null;
   color: string;
-  has_phases: boolean;
-  phase_count: number | null;
-  created_at: string;
+  icon: string | null;
+  hasPhases: boolean;
+  phaseNumber: number | null;
+  phaseName: string | null;
+  phaseColor: string | null;
+  isPhase: boolean;
+  isParent: boolean;
+  displayName: string;
+  effectiveColor: string;
+  parentContentTypeId: number | null;
+  createdAt: string;
   phases: Phase[];
 }
 
@@ -14,8 +22,17 @@ export interface Phase {
   name: string;
   description: string | null;
   color: string;
-  phase_number: number;
-  created_at: string;
+  icon: string | null;
+  hasPhases: boolean;
+  phaseNumber: number | null;
+  phaseName: string | null;
+  phaseColor: string | null;
+  isPhase: boolean;
+  isParent: boolean;
+  displayName: string;
+  effectiveColor: string;
+  parentContentTypeId: number | null;
+  createdAt: string;
 }
 
 export interface ContentTypeTagCreate {
@@ -41,7 +58,7 @@ export interface PhaseUpdate {
 }
 
 class ContentTypeService {
-  private baseUrl = '/api/tags/content-type';
+  private baseUrl = '/api/content-types';
 
   async listContentTypes(): Promise<ContentTypeTag[]> {
     const response = await fetch(this.baseUrl);

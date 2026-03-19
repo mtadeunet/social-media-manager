@@ -17,7 +17,7 @@ class MediaContentTypeTag(Base):
     __tablename__ = "media_content_type_tags"
     
     media_vault_id = Column(Integer, ForeignKey("media_vault.id"), primary_key=True)
-    content_type_id = Column(Integer, ForeignKey("content_type.id"), primary_key=True)
+    content_type_id = Column(Integer, ForeignKey("content_types.id"), primary_key=True)
     applied_date = Column(DateTime, default=datetime.utcnow)
 
 

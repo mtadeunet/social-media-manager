@@ -87,3 +87,14 @@ class MediaStatisticsResponse(BaseSchema):
     total_versions: int
     file_types: List[MediaTypeCount]
     average_versions_per_media: float
+
+
+class ContentTypesUpdateRequest(BaseSchema):
+    """Request model for updating content types"""
+    contentTypes: List[int] = Field(..., description="List of content type IDs")
+
+
+class BatchContentTypesUpdateRequest(BaseSchema):
+    """Request model for batch updating content types"""
+    mediaIds: List[int] = Field(..., description="List of media item IDs")
+    contentTypes: List[int] = Field(..., description="List of content type IDs")
