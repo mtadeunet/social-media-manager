@@ -11,8 +11,8 @@ const SelectionControls: React.FC<SelectionControlsProps> = ({
   if (selectedCount === 0) {
     return (
       <div className="flex items-center justify-between mb-4">
-        <div className="text-white font-medium drop-shadow">
-          Showing {totalCount} file{totalCount !== 1 ? 's' : ''}
+        <div className="text-white/70 text-sm">
+          {totalCount} file{totalCount !== 1 ? 's' : ''}
           {totalCount > 0 && (
             <button
               onClick={onSelectAll}
@@ -27,11 +27,11 @@ const SelectionControls: React.FC<SelectionControlsProps> = ({
   }
 
   return (
-    <div className="bg-gray-800 rounded-2xl p-4 mb-8">
+    <div className="bg-gray-800 rounded-lg px-4 py-2 mb-4">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <span className="text-white font-medium">
-            {selectedCount} of {totalCount} file{totalCount !== 1 ? 's' : ''} selected
+        <div className="flex items-center gap-3">
+          <span className="text-white text-sm">
+            {selectedCount} of {totalCount} selected
           </span>
           <button
             onClick={onSelectAll}
@@ -43,15 +43,15 @@ const SelectionControls: React.FC<SelectionControlsProps> = ({
             onClick={onClearSelection}
             className="px-3 py-1 bg-gray-600 hover:bg-gray-700 text-white text-xs rounded-md border border-gray-700 shadow-sm hover:shadow-md transition-all duration-200 font-medium"
           >
-            Clear Selection
+            Clear
           </button>
         </div>
         
         <button
           onClick={onDeleteSelected}
-          className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm rounded-lg border border-red-700 shadow-sm hover:shadow-md transition-all duration-200 font-medium"
+          className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded-lg border border-red-700 shadow-sm hover:shadow-md transition-all duration-200 font-medium"
         >
-          Delete Selected ({selectedCount})
+          Delete ({selectedCount})
         </button>
       </div>
     </div>

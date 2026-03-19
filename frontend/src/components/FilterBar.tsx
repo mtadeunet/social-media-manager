@@ -33,86 +33,72 @@ const FilterBar: React.FC<FilterBarProps> = ({
   };
 
   return (
-    <div className="bg-gray-800 rounded-2xl p-6 mb-8">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+    <div className="bg-gray-800 rounded-xl px-4 py-3 mb-6">
+      <div className="flex items-center gap-4 flex-wrap">
         {/* Search Input */}
-        <div>
-          <label className="block text-sm font-medium text-white mb-2 drop-shadow">
-            Search
-          </label>
+        <div className="flex-1 min-w-[200px]">
           <input
             type="text"
             value={filters.searchTerm}
             onChange={handleSearchChange}
             placeholder="Search by filename..."
-            className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-gray-600 transition-all placeholder-gray-400 text-white"
+            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-gray-600 transition-all placeholder-gray-400 text-white text-sm"
           />
         </div>
 
         {/* Upload Filter */}
-        <div>
-          <label className="block text-sm font-medium text-white mb-2 drop-shadow">
-            Upload Filter
-          </label>
+        <div className="min-w-[150px]">
           <select
             value={filters.uploadFilter}
             onChange={handleUploadFilterChange}
-            className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-gray-600 transition-all text-white"
+            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-gray-600 transition-all text-white text-sm"
           >
             <option value="none">All Uploads</option>
-            <option value="last-session">Last Upload Session</option>
+            <option value="last-session">Last Session</option>
             <option value="time-range">Time Range</option>
           </select>
         </div>
 
         {/* Time Range Filter (shown when time-range is selected) */}
         {filters.uploadFilter === 'time-range' && (
-          <div>
-            <label className="block text-sm font-medium text-white mb-2 drop-shadow">
-              Time Range
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="number"
-                min="1"
-                value={filters.timeRangeFilter.value}
-                onChange={handleTimeRangeValueChange}
-                className="flex-1 px-4 py-3 bg-gray-700 border border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-gray-600 transition-all text-white text-center"
-              />
-              <select
-                value={filters.timeRangeFilter.unit}
-                onChange={handleTimeRangeUnitChange}
-                className="flex-1 px-4 py-3 bg-gray-700 border border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-gray-600 transition-all text-white"
-              >
-                <option value="minutes">Minutes</option>
-                <option value="hours">Hours</option>
-                <option value="days">Days</option>
-              </select>
-            </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              min="1"
+              value={filters.timeRangeFilter.value}
+              onChange={handleTimeRangeValueChange}
+              className="w-16 px-2 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-gray-600 transition-all text-white text-sm text-center"
+            />
+            <select
+              value={filters.timeRangeFilter.unit}
+              onChange={handleTimeRangeUnitChange}
+              className="px-2 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-gray-600 transition-all text-white text-sm"
+            >
+              <option value="minutes">Min</option>
+              <option value="hours">Hrs</option>
+              <option value="days">Days</option>
+            </select>
           </div>
         )}
-      </div>
 
-      {/* Second Row - Options and Clear Button */}
-      <div className="flex items-center justify-between">
         {/* Show Usable Only Checkbox */}
-        <label className="flex items-center space-x-3 cursor-pointer">
+        <label className="flex items-center space-x-2 cursor-pointer">
           <input
             type="checkbox"
             checked={filters.showUsableOnly}
             onChange={handleUsableOnlyChange}
-            className="w-5 h-5 text-blue-600 bg-gray-600 border-gray-500 rounded focus:ring-blue-500"
+            className="w-4 h-4 text-blue-600 bg-gray-600 border-gray-500 rounded focus:ring-blue-500"
           />
-          <span className="text-sm font-medium text-white">Show usable only</span>
+          <span className="text-sm text-white">Usable only</span>
         </label>
 
         {/* Clear Filters Button */}
         {hasActiveFilters && (
           <button
             onClick={onClearFilters}
-            className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 text-sm font-medium transition-all duration-200 border border-gray-600"
+            className="px-3 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 text-sm font-medium transition-all duration-200 border border-gray-600"
           >
-            Clear Filters
+            Clear
           </button>
         )}
       </div>

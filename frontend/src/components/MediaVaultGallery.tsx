@@ -9,7 +9,15 @@ import MediaVersionModal from './MediaVersionModal';
 import SelectionControls from './SelectionControls';
 import TagsManagementModal from './TagsManagementModal';
 
-const MediaVaultGallery: React.FC = () => {
+interface MediaVaultGalleryProps {
+  showContentTypeModal: boolean;
+  setShowContentTypeModal: (show: boolean) => void;
+}
+
+const MediaVaultGallery: React.FC<MediaVaultGalleryProps> = ({ 
+  showContentTypeModal, 
+  setShowContentTypeModal 
+}) => {
   const [mediaItems, setMediaItems] = useState<MediaVault[]>([]);
   const [loading, setLoading] = useState(true);
   // Filter state
@@ -19,13 +27,10 @@ const MediaVaultGallery: React.FC = () => {
     uploadFilter: 'none',
     timeRangeFilter: { value: 10, unit: 'minutes' }
   });
-  const [backendConnected, setBackendConnected] = useState(false);
 
   // Selection state
   const [selectedMediaIds, setSelectedMediaIds] = useState<Set<number>>(new Set());
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
-
-
 
   // Tags state
   const [enhancementTags, setEnhancementTags] = useState<EnhancementTag[]>([]);
@@ -34,18 +39,11 @@ const MediaVaultGallery: React.FC = () => {
   // Modal state
   const [selectedMedia, setSelectedMedia] = useState<MediaVault | null>(null);
   const [showVersionModal, setShowVersionModal] = useState(false);
-  const [showContentTypeModal, setShowContentTypeModal] = useState(false);
 
   useEffect(() => {
     loadMedia();
     loadTags();
   }, [filters.searchTerm, filters.showUsableOnly, filters.uploadFilter, filters.timeRangeFilter]);
-
-  // Periodic connection check
-  useEffect(() => {
-    const interval = setInterval(checkBackendConnection, 5000); // Check every 5 seconds
-    return () => clearInterval(interval);
-  }, []);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -73,25 +71,14 @@ const MediaVaultGallery: React.FC = () => {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [mediaItems, showVersionModal, showContentTypeModal]);
 
-  const checkBackendConnection = async () => {
-    try {
-      const response = await fetch('http://localhost:8000/');
-      setBackendConnected(response.ok);
-    } catch (error) {
-      setBackendConnected(false);
-    }
-  };
-
   const loadMedia = async () => {
     try {
       setLoading(true);
-      await checkBackendConnection();
       const response = await mediaVaultService.listMedia(0, 50);
       setMediaItems(response.media);
     } catch (error) {
       console.error('Failed to load media:', error);
       setMediaItems([]);
-      setBackendConnected(false);
     } finally {
       setLoading(false);
     }
@@ -220,7 +207,7 @@ const MediaVaultGallery: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 p-8 relative overflow-hidden">
+    <div className="min-h-screen bg-gray-900 p-4 relative overflow-hidden">
       {/* Subtle animated background elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-0 left-0 w-96 h-96 bg-gray-800 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob"></div>
@@ -229,50 +216,25 @@ const MediaVaultGallery: React.FC = () => {
       </div>
 
       <div className="max-w-7xl mx-auto relative z-10">
-        {/* Header */}
-        <div className="mb-12">
-          <div className="flex items-center justify-between mb-4">
-            <h1 className="text-6xl font-bold text-white tracking-tight drop-shadow-lg">
-              Media Vault
-            </h1>
-            {/* Connection Status Indicator */}
-            <div className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{
-              backgroundColor: backendConnected ? '#065f46' : '#7f1d1d',
-              border: `1px solid ${backendConnected ? '#10b981' : '#ef4444'}`
-            }}>
-              <div className={`w-2 h-2 rounded-full ${backendConnected ? 'bg-green-400' : 'bg-red-400'} ${backendConnected ? 'animate-pulse' : ''}`}></div>
-              <span className="text-sm font-medium text-white">
-                {backendConnected ? 'Backend Connected' : 'Backend Offline'}
-              </span>
+        {/* Compact Header */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-4">
+            <div>
+              <h1 className="text-3xl font-bold text-white tracking-tight drop-shadow-lg">
+                Media Vault
+              </h1>
+              <p className="text-white/70 text-sm">Centralized media management with intelligent version tracking</p>
             </div>
-
-            {/* Manage Tags Button */}
-            <button
-              onClick={() => setShowContentTypeModal(true)}
-              className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded-lg border border-purple-700 shadow-sm hover:shadow-md transition-all duration-200 font-medium"
-            >
-              Manage Tags
-            </button>
           </div>
-          <p className="text-white/90 text-xl drop-shadow">Centralized media management with intelligent version tracking</p>
-        </div>
-
-        {/* Upload Section */}
-        <div className="bg-gray-800 rounded-2xl p-8 mb-8 hover:bg-gray-700 transition-all duration-300">
-          <h2 className="text-2xl font-semibold text-white mb-6">
-            Upload Media
-          </h2>
-          {!backendConnected && (
-            <div className="mb-4 p-3 bg-red-900/50 border border-red-600 rounded-lg">
-              <p className="text-red-200 text-sm">
-                ⚠️ Backend is offline. File uploads will not work until the backend connection is restored.
-              </p>
-            </div>
-          )}
-          <MediaDropZone
-            onUploadComplete={loadMedia}
-            onUploadSessionComplete={handleUploadSessionComplete}
-          />
+          
+          {/* Compact Upload Zone */}
+          <div className="w-24 h-24">
+            <MediaDropZone
+              compact={true}
+              onUploadComplete={loadMedia}
+              onUploadSessionComplete={handleUploadSessionComplete}
+            />
+          </div>
         </div>
 
         {/* Filter Bar */}
@@ -307,7 +269,7 @@ const MediaVaultGallery: React.FC = () => {
           <p className="text-gray-400 text-lg">Upload your first media file to get started</p>
         </div>
       ) : (
-        <div className="grid gap-4 p-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
+        <div className="grid gap-2 p-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))' }}>
           {mediaItems.map((media, index) => (
             <div
               key={media.id}
@@ -322,7 +284,7 @@ const MediaVaultGallery: React.FC = () => {
               {/* Cell with thumbnail filling it */}
               <div className="aspect-square bg-gray-800 rounded-lg hover:bg-gray-700 transition-colors duration-200 relative overflow-hidden">
                 {/* Thumbnail fills the cell */}
-                <div className="absolute inset-0 p-[10px] pb-0">
+                <div className="absolute inset-0 p-[6px] pb-0">
                   {media.latestVersion?.thumbnailPath ? (
                     <img
                       src={`http://localhost:8000/${media.latestVersion.thumbnailPath}`}

@@ -4,6 +4,7 @@ import { mediaVaultService } from '../services/mediaVaultService';
 interface MediaDropZoneProps {
   onUploadComplete: () => void;
   onUploadSessionComplete?: (sessionData: { timestamp: number; fileIds: number[] }) => void;
+  compact?: boolean;
 }
 
 interface MediaSlot {
@@ -17,7 +18,7 @@ interface MediaSlot {
   error?: string;
 }
 
-const MediaDropZone: React.FC<MediaDropZoneProps> = ({ onUploadComplete, onUploadSessionComplete }) => {
+const MediaDropZone: React.FC<MediaDropZoneProps> = ({ onUploadComplete, onUploadSessionComplete, compact = false }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [mediaSlots, setMediaSlots] = useState<MediaSlot[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -71,7 +72,7 @@ const MediaDropZone: React.FC<MediaDropZoneProps> = ({ onUploadComplete, onUploa
       const baseName = fileName.replace(/\.[^/.]+$/, '');
       const response = await mediaVaultService.listMedia(0, 1000, baseName);
       return response.media.some(media =>
-        media.base_filename.toLowerCase() === baseName.toLowerCase()
+        media.baseFilename.toLowerCase() === baseName.toLowerCase()
       );
     } catch {
       return false;
@@ -147,7 +148,7 @@ const MediaDropZone: React.FC<MediaDropZoneProps> = ({ onUploadComplete, onUploa
               ...s,
               status: 'uploaded',
               progress: 100,
-              thumbnail: response.latest_version?.thumbnail_path
+              thumbnail: response.latestVersion?.thumbnailPath
             } : s
           ));
 
@@ -201,7 +202,7 @@ const MediaDropZone: React.FC<MediaDropZoneProps> = ({ onUploadComplete, onUploa
   };
 
   return (
-    <div style={{ marginTop: '20px' }}>
+    <div style={{ marginTop: compact ? '0' : '20px' }}>
       <div
         onDragEnter={handleDragEnter}
         onDragOver={handleDragOver}
@@ -209,35 +210,50 @@ const MediaDropZone: React.FC<MediaDropZoneProps> = ({ onUploadComplete, onUploa
         onDrop={handleDrop}
         style={{
           border: `2px dashed ${isDragging ? '#3b82f6' : '#4b5563'}`,
-          borderRadius: '8px',
-          padding: '40px 20px',
+          borderRadius: compact ? '8px' : '8px',
+          padding: compact ? '8px' : '40px 20px',
           textAlign: 'center',
           backgroundColor: isDragging ? '#1e293b' : '#1f2937',
           transition: 'all 0.2s',
-          cursor: 'pointer'
+          cursor: 'pointer',
+          height: compact ? '100%' : 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          alignItems: 'center',
+          minHeight: compact ? '96px' : 'auto'
         }}
         onClick={() => fileInputRef.current?.click()}
       >
-        <div style={{ fontSize: '48px', marginBottom: '12px' }}>📁</div>
-        <p style={{ fontSize: '16px', color: '#f3f4f6', marginBottom: '8px', fontWeight: '500' }}>
-          Drop files here
-        </p>
-        <p style={{ fontSize: '14px', color: '#9ca3af', marginBottom: '16px' }}>
-          or
-        </p>
-        <button
-          type="button"
-          className="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            fileInputRef.current?.click();
-          }}
-        >
-          Browse Files
-        </button>
-        <p style={{ fontSize: '12px', color: '#9ca3af', marginTop: '12px' }}>
-          Supports images and videos
-        </p>
+        {compact ? (
+          <>
+            <div style={{ fontSize: '24px', marginBottom: '4px' }}>📁</div>
+            <div style={{ fontSize: '10px', color: '#9ca3af' }}>Upload</div>
+          </>
+        ) : (
+          <>
+            <div style={{ fontSize: '48px', marginBottom: '12px' }}>📁</div>
+            <p style={{ fontSize: '16px', color: '#f3f4f6', marginBottom: '8px', fontWeight: '500' }}>
+              Drop files here
+            </p>
+            <p style={{ fontSize: '14px', color: '#9ca3af', marginBottom: '16px' }}>
+              or
+            </p>
+            <button
+              type="button"
+              className="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                fileInputRef.current?.click();
+              }}
+            >
+              Browse Files
+            </button>
+            <p style={{ fontSize: '12px', color: '#9ca3af', marginTop: '12px' }}>
+              Supports images and videos
+            </p>
+          </>
+        )}
       </div>
 
       <input
@@ -251,7 +267,7 @@ const MediaDropZone: React.FC<MediaDropZoneProps> = ({ onUploadComplete, onUploa
 
 
       {/* Media Slots */}
-      {mediaSlots.length > 0 && (
+      {!compact && mediaSlots.length > 0 && (
         <div style={{ marginTop: '20px' }}>
           <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px', color: '#f3f4f6' }}>
             Upload Progress
