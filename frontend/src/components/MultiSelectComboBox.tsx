@@ -17,8 +17,8 @@ const MultiSelectComboBox: React.FC<MultiSelectComboBoxProps> = ({
   placeholder = "Select content types..."
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -47,7 +47,7 @@ const MultiSelectComboBox: React.FC<MultiSelectComboBoxProps> = ({
     let countWithContentType = 0;
     selectedMediaIds.forEach(mediaId => {
       const contentTypes = mediaContentTypes.get(mediaId) || [];
-      if (contentTypes.some(ct => ct.id === option.id)) {
+      if (contentTypes.some((ct: ContentType) => ct.id === option.id)) {
         countWithContentType++;
       }
     });

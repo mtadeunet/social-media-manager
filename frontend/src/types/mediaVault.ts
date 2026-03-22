@@ -16,6 +16,8 @@ export interface MediaVault {
 export interface MediaVersion {
   id: number;
   mediaVaultId: number;
+  parentVersionId?: number | null;
+  sequenceOrder?: number;
   filename: string;
   filePath: string;
   thumbnailPath: string;

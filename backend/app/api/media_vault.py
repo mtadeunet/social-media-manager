@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Body, Request
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import select
 from typing import List, Optional
@@ -294,6 +294,8 @@ async def list_media(
             latest_version_response = MediaVersionResponse(
                 id=latest_version.id,
                 media_vault_id=latest_version.media_vault_id,
+                parent_version_id=latest_version.parent_version_id,
+                sequence_order=latest_version.sequence_order,
                 filename=latest_version.filename,
                 file_path=latest_version.file_path,
                 thumbnail_path=latest_version.thumbnail_path,
@@ -334,7 +336,9 @@ async def get_media(media_id: int, db: Session = Depends(get_db)):
     
     # Build versions with proper schema
     versions = []
-    for version in sorted(media.versions, key=lambda v: v.upload_date):
+    # Order by sequence_order first, then upload_date as fallback
+    ordered_versions = sorted(media.versions, key=lambda v: (v.sequence_order or 999, v.upload_date))
+    for version in ordered_versions:
         tags = []
         for tag in version.enhancement_tags:
             notes = get_tag_notes(version.id, tag.id, db) if tag.name == 'invalid' else None
@@ -349,6 +353,8 @@ async def get_media(media_id: int, db: Session = Depends(get_db)):
         versions.append(MediaVersionResponse(
             id=version.id,
             media_vault_id=version.media_vault_id,
+            parent_version_id=version.parent_version_id,
+            sequence_order=version.sequence_order,
             filename=version.filename,
             file_path=version.file_path,
             thumbnail_path=version.thumbnail_path,
@@ -616,3 +622,140 @@ def batch_update_content_types(
     
     db.commit()
     return {"message": f"Content types updated for {len(data.mediaIds)} media items"}
+
+
+@router.put("/{media_id}/versions/{version_id}/move")
+async def move_version(
+    media_id: int,
+    version_id: int,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """Move a version to a new parent (for drag'n'drop reordering)"""
+    
+    # Parse JSON body manually
+    try:
+        body = await request.json()
+        new_parent_id = body.get("new_parent_id")
+    except:
+        new_parent_id = None
+    
+    print(f"Move version: media_id={media_id}, version_id={version_id}, new_parent_id={new_parent_id}")
+    
+    # Verify media exists
+    media = db.query(MediaVault).filter(MediaVault.id == media_id).first()
+    if not media:
+        raise HTTPException(status_code=404, detail="Media not found")
+    
+    # Verify version exists and belongs to this media
+    version = db.query(MediaVersion).filter(
+        MediaVersion.id == version_id,
+        MediaVersion.media_vault_id == media_id
+    ).first()
+    if not version:
+        raise HTTPException(status_code=404, detail="Version not found")
+    
+    # Don't allow moving the original version
+    if version.enhancement_tags and any(tag.name == 'original' for tag in version.enhancement_tags):
+        raise HTTPException(status_code=400, detail="Cannot move the original version")
+    
+    # If new_parent_id is provided, verify it exists and belongs to the same media
+    if new_parent_id:
+        new_parent = db.query(MediaVersion).filter(
+            MediaVersion.id == new_parent_id,
+            MediaVersion.media_vault_id == media_id
+        ).first()
+        if not new_parent:
+            raise HTTPException(status_code=404, detail="Parent version not found")
+        
+        # Prevent circular references
+        current = new_parent
+        while current and current.parent_version_id:
+            if current.parent_version_id == version_id:
+                raise HTTPException(status_code=400, detail="Cannot create circular reference")
+            current = current.parent_version
+    
+    # Update the parent
+    print(f"Before update: version.parent_version_id = {version.parent_version_id}")
+    version.parent_version_id = new_parent_id
+    print(f"After update: version.parent_version_id = {version.parent_version_id}")
+    db.commit()
+    print(f"After commit: checking from DB...")
+    
+    # Verify the update
+    db.refresh(version)
+    print(f"Verified: version.parent_version_id = {version.parent_version_id}")
+    
+    return {"message": "Version moved successfully"}
+
+
+@router.put("/{media_id}/versions/reorder")
+async def reorder_versions(
+    media_id: int,
+    version_ids: List[int] = Body(...),
+    db: Session = Depends(get_db)
+):
+    """Reorder versions by updating their sequence_order"""
+    
+    # Verify all versions belong to this media
+    versions = db.query(MediaVersion).filter(
+        MediaVersion.media_vault_id == media_id,
+        MediaVersion.id.in_(version_ids)
+    ).all()
+    
+    if len(versions) != len(version_ids):
+        raise HTTPException(status_code=400, detail="Some versions not found")
+    
+    # Update sequence_order based on the provided order
+    for index, version_id in enumerate(version_ids):
+        version = next(v for v in versions if v.id == version_id)
+        version.sequence_order = index + 1
+    
+    db.commit()
+    
+    return {"message": "Versions reordered successfully"}
+
+
+@router.put("/{media_id}/filename")
+async def update_media_filename(
+    media_id: int,
+    new_base_filename: str = Body(...),
+    db: Session = Depends(get_db)
+):
+    """Update the base filename for all versions of a media item"""
+    
+    # Verify media exists
+    media = db.query(MediaVault).filter(MediaVault.id == media_id).first()
+    if not media:
+        raise HTTPException(status_code=404, detail="Media not found")
+    
+    # Validate new filename
+    if not new_base_filename or not new_base_filename.strip():
+        raise HTTPException(status_code=400, detail="Filename cannot be empty")
+    
+    # Extract extension from first version
+    if not media.versions:
+        raise HTTPException(status_code=400, detail="No versions found")
+    
+    first_version = media.versions[0]
+    file_extension = first_version.filename.split('.')[-1] if '.' in first_version.filename else 'jpg'
+    
+    # Update media base filename
+    old_base_filename = media.base_filename
+    media.base_filename = new_base_filename.strip()
+    
+    # Update all version filenames
+    for version in media.versions:
+        # Extract hash from current filename
+        parts = version.filename.split('_')
+        if len(parts) >= 2:
+            hash_part = parts[-1].split('.')[0]  # Get hash without extension
+            version.filename = f"{new_base_filename.strip()}_{hash_part}.{file_extension}"
+    
+    db.commit()
+    
+    return {
+        "message": "Filename updated successfully",
+        "old_filename": old_base_filename,
+        "new_filename": new_base_filename.strip()
+    }

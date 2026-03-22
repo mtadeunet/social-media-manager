@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { mediaVaultService } from '../services/mediaVaultService';
 import { EnhancementTag, MediaVault, MediaVersion } from '../types/mediaVault';
+import FilenameEditor from './FilenameEditor';
+import TagDropdown from './TagDropdown';
+import MediaVersionTree from './MediaVersionTree';
 
 interface MediaVersionModalProps {
   isOpen: boolean;
@@ -19,16 +22,27 @@ const MediaVersionModal: React.FC<MediaVersionModalProps> = ({
 }) => {
   const [versions, setVersions] = useState<MediaVersion[]>([]);
   const [loading, setLoading] = useState(false);
-  const [showTagSelection, setShowTagSelection] = useState(false);
-  const [selectedVersion, setSelectedVersion] = useState<MediaVersion | null>(null);
-  const [selectedTags, setSelectedTags] = useState<EnhancementTag[]>([]);
-  const [availableTags, setAvailableTags] = useState<EnhancementTag[]>([]);
+  const [editingVersion, setEditingVersion] = useState<number | null>(null);
+  const [tagDropdownPosition, setTagDropdownPosition] = useState<{ top: number; left: number } | null>(null);
 
+  // Load versions when modal opens
   useEffect(() => {
     if (isOpen && media) {
       loadVersions();
+      // Hide scrollbars when modal opens
+      document.documentElement.style.overflow = 'hidden';
+      document.body.style.overflow = 'hidden';
     }
   }, [isOpen, media]);
+
+  // Restore scrollbars when modal closes
+  useEffect(() => {
+    return () => {
+      // Cleanup: restore scrollbars
+      document.documentElement.style.overflow = '';
+      document.body.style.overflow = '';
+    };
+  }, [isOpen]);
 
   // Handle Escape key to close modal
   useEffect(() => {
@@ -48,6 +62,7 @@ const MediaVersionModal: React.FC<MediaVersionModalProps> = ({
     setLoading(true);
     try {
       const response = await mediaVaultService.getMediaVersions(media.id);
+      console.log('Loaded versions:', response);
       setVersions(response.versions || []);
     } catch (error) {
       console.error('Failed to load versions:', error);
@@ -65,15 +80,12 @@ const MediaVersionModal: React.FC<MediaVersionModalProps> = ({
 
     try {
       await mediaVaultService.deleteVersion(media.id, versionId);
-      // Remove the deleted version from the state
-      setVersions(versions.filter(v => v.id !== versionId));
+      await loadVersions();
 
-      // Call the callback to refresh parent component
       if (onVersionDeleted) {
         onVersionDeleted();
       }
 
-      // If this was the last version, close the modal
       if (versions.length <= 1) {
         onClose();
       }
@@ -83,73 +95,114 @@ const MediaVersionModal: React.FC<MediaVersionModalProps> = ({
     }
   };
 
-  const handleEditTags = (version: MediaVersion) => {
-    setSelectedVersion(version);
-
-    // Get current tags for this version
-    const currentTags = version.enhancementTags || [];
-    setSelectedTags(currentTags);
-
-    // Set available tags (exclude invalid tag and original tag for non-original versions)
-    const hasOriginalTag = currentTags.some(tag => tag.id === 2); // Original tag is now ID 2
-    const validTags = enhancementTags.filter(tag => {
-      if (tag.id === 1) return false; // Invalid tag is ID 1
-      if (tag.id === 2 && !hasOriginalTag) return false; // Original tag is ID 2
-      return true;
-    });
-    setAvailableTags(validTags);
-
-    setShowTagSelection(true);
-  };
-
-  const handleTagToggle = (tag: EnhancementTag) => {
-    setSelectedTags(prev => {
-      const isSelected = prev.some(t => t.id === tag.id);
-
-      // Prevent removing the "original" tag (ID 2)
-      if (isSelected && tag.id === 2) {
-        return prev; // Don't allow removing original tag
-      }
-
-      if (isSelected) {
-        return prev.filter(t => t.id !== tag.id);
-      } else {
-        return [...prev, tag];
-      }
+  const handleTagClick = (versionId: number, event: React.MouseEvent) => {
+    const rect = (event.target as HTMLElement).getBoundingClientRect();
+    setEditingVersion(versionId);
+    setTagDropdownPosition({
+      top: rect.bottom + 5,
+      left: rect.left
     });
   };
 
-  const handleSaveTags = async () => {
-    if (!selectedVersion) return;
+  const [dragOverVersionId, setDragOverVersionId] = useState<number | null>(null);
+
+  const handleDragStart = (e: React.DragEvent, versionId: number) => {
+    e.dataTransfer.setData('text/plain', versionId.toString());
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDragEnter = (e: React.DragEvent, versionId: number) => {
+    e.preventDefault();
+    if (dragOverVersionId !== versionId) {
+      setDragOverVersionId(versionId);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    // Only clear if leaving the entire card, not entering child elements
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX;
+    const y = e.clientY;
+    
+    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+      setDragOverVersionId(null);
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent, targetVersionId: number) => {
+    e.preventDefault();
+    setDragOverVersionId(null);
+    
+    const draggedVersionId = parseInt(e.dataTransfer.getData('text/plain'));
+    
+    if (draggedVersionId === targetVersionId) {
+      return; // Can't drop on itself
+    }
+    
+    try {
+      console.log('Starting drop operation...');
+      setLoading(true);
+      
+      // Get the versions to understand current relationships
+      const draggedVersion = versions.find(v => v.id === draggedVersionId);
+      const targetVersion = versions.find(v => v.id === targetVersionId);
+      
+      if (!draggedVersion || !targetVersion) return;
+      
+      console.log('Branching: making', targetVersionId, 'parent of', draggedVersionId);
+      console.log('Calling moveVersion with:', media!.id, draggedVersionId, targetVersionId);
+      
+      // Set the target as parent of the dragged version
+      await mediaVaultService.moveVersion(media!.id, draggedVersionId, targetVersionId);
+      
+      console.log('Branching completed, reloading versions...');
+      
+      // Reload versions to reflect the change
+      await loadVersions();
+      
+      if (onVersionDeleted) {
+        onVersionDeleted();
+      }
+    } catch (error) {
+      console.error('Failed to create branch:', error);
+      alert('Failed to create branch. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleTagSelectionChange = async (versionId: number, newTags: EnhancementTag[]) => {
+    const version = versions.find(v => v.id === versionId);
+    if (!version) return;
 
     try {
       setLoading(true);
-
-      // Determine tags to add and remove
-      const currentTagIds = selectedVersion.enhancementTags?.map(t => t.id) || [];
-      const newTagIds = selectedTags.map(t => t.id);
+      
+      const currentTagIds = version.enhancementTags?.map(t => t.id) || [];
+      const newTagIds = newTags.map(t => t.id);
 
       const tagsToAdd = newTagIds.filter(id => !currentTagIds.includes(id));
-      const tagsToRemove = currentTagIds.filter(id => !newTagIds.includes(id) && id !== 2); // Don't remove original tag (ID 2)
+      const tagsToRemove = currentTagIds.filter(id => !newTagIds.includes(id) && id !== 2); // Don't remove original tag
 
-      // Separate invalid tags to remove
-      const invalidTagsToRemove = selectedVersion.enhancementTags?.filter(t => t.name === 'invalid' && t.notes && !newTagIds.includes(t.id))
-        .map(t => t.notes || '') || [];
+      const invalidTagsToRemove = version.enhancementTags?.filter(t => 
+        t.name === 'invalid' && t.notes && !newTagIds.includes(t.id)
+      ).map(t => t.notes || '') || [];
 
-      await mediaVaultService.updateVersionTags(selectedVersion.id, {
+      await mediaVaultService.updateVersionTags(versionId, {
         tagsToAdd,
         tagsToRemove,
         invalidTagsToRemove
       });
 
-      // Reload versions to show updated tags
       await loadVersions();
-
-      // Close the tag selection popup
-      setShowTagSelection(false);
-      setSelectedVersion(null);
-      setSelectedTags([]);
-      setAvailableTags([]);
+      setEditingVersion(null);
+      setTagDropdownPosition(null);
     } catch (error) {
       console.error('Failed to update tags:', error);
       alert('Failed to update tags. Please try again.');
@@ -158,15 +211,199 @@ const MediaVersionModal: React.FC<MediaVersionModalProps> = ({
     }
   };
 
+  const handleFilenameUpdate = async (newFilename: string) => {
+    if (!media) return;
+
+    try {
+      await mediaVaultService.updateFilename(media.id, newFilename);
+      // Update media base filename in the modal
+      media.baseFilename = newFilename;
+    } catch (error) {
+      console.error('Failed to update filename:', error);
+      alert('Failed to update filename. Please try again.');
+    }
+  };
+
+  // Simple tree rendering without reactflow
+  const renderVersionTree = () => {
+    console.log('Rendering versions tree, versions:', versions);
+    console.log('All versions details:');
+    versions.forEach(v => {
+      console.log(`  Version ${v.id}: tags=${v.enhancementTags?.map(t => t.name).join(',') || 'none'}, parent=${v.parentVersionId}`);
+    });
+    
+    // Find original version (root)
+    const originalVersion = versions.find(v => 
+      v.enhancementTags?.some(tag => tag.name === 'original')
+    );
+
+    if (!originalVersion) {
+      console.log('No original version found');
+      return <div className="text-white">No original version found</div>;
+    }
+
+    console.log('Original version:', originalVersion);
+
+    // Build tree map - include ALL versions, not just ones with parents
+    const childrenMap = new Map<number, MediaVersion[]>();
+    const rootVersions: MediaVersion[] = [];
+    
+    versions.forEach(v => {
+      if (v.parentVersionId) {
+        if (!childrenMap.has(v.parentVersionId)) {
+          childrenMap.set(v.parentVersionId, []);
+        }
+        childrenMap.get(v.parentVersionId)!.push(v);
+      } else {
+        // This is a root version (no parent)
+        if (v.id !== originalVersion.id) {
+          rootVersions.push(v);
+        }
+      }
+    });
+
+    console.log('Root versions (no parent):', rootVersions.map(v => v.id));
+    console.log('Children map:', Array.from(childrenMap.entries()).map(([k, v]) => [k, v.map(c => c.id)]));
+    
+    // For debugging, let's also check what versions have parentVersionId
+    console.log('Versions with parents:');
+    versions.forEach(v => {
+      if (v.parentVersionId) {
+        console.log(`  Version ${v.id} has parent ${v.parentVersionId}`);
+      }
+    });
+
+    // Render version node
+    const renderVersionNode = (version: MediaVersion, level: number = 0) => {
+      const isOriginal = version.id === originalVersion.id;
+      const hasNoTags = !version.enhancementTags || version.enhancementTags.length === 0;
+      const hasInvalidTag = version.enhancementTags?.some(tag => tag.name === 'invalid');
+      const children = childrenMap.get(version.id) || [];
+
+      return (
+        <div 
+          key={version.id} 
+          className="flex flex-col items-start"
+        >
+          <div 
+            className={`bg-gray-700 rounded-lg p-3 shadow-lg border border-gray-600 relative ${!isOriginal ? 'cursor-move' : ''} ${
+              dragOverVersionId === version.id ? 'ring-2 ring-blue-500' : ''
+            }`}
+            style={{ minWidth: '200px' }}
+            draggable={!isOriginal}
+            onDragStart={(e) => handleDragStart(e, version.id)}
+            onDragOver={handleDragOver}
+            onDragEnter={(e) => handleDragEnter(e, version.id)}
+            onDragLeave={handleDragLeave}
+            onDrop={(e) => handleDrop(e, version.id)}
+          >
+            {/* Drag indicator for non-original versions */}
+            {!isOriginal && (
+              <div className="absolute top-1 left-1 text-gray-400 text-xs cursor-move">
+                ⋮⋮
+              </div>
+            )}
+            {/* Delete button for non-original versions */}
+            {!isOriginal && (
+              <button
+                onClick={() => handleDeleteVersion(version.id)}
+                className="float-right w-6 h-6 bg-red-600 hover:bg-red-700 text-white rounded flex items-center justify-center text-xs"
+                title="Delete version"
+              >
+                🗑️
+              </button>
+            )}
+
+            {/* Thumbnail */}
+            <div className="bg-gray-600 rounded mb-2 overflow-hidden" style={{ height: '120px' }}>
+              {version.thumbnailPath ? (
+                <img
+                  src={`/${version.thumbnailPath}`}
+                  alt={`Version ${version.id}`}
+                  className="w-full h-full object-cover pointer-events-none"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-gray-400">
+                  No thumbnail
+                </div>
+              )}
+            </div>
+
+            {/* Version info */}
+            <div className="text-center">
+              <div className="text-xs text-gray-400 mb-1">Version {version.id}</div>
+              {version.enhancementTags && version.enhancementTags.length > 0 && (
+                <div className="flex flex-wrap gap-1 justify-center">
+                  {version.enhancementTags.map(tag => (
+                    <span
+                      key={tag.id}
+                      className={`text-xs px-1 rounded ${
+                        tag.name === 'original' ? 'bg-blue-900 text-blue-200' :
+                        tag.name === 'edit' ? 'bg-green-900 text-green-200' :
+                        tag.name === 'invalid' ? 'bg-red-900 text-red-200' :
+                        'bg-gray-700 text-gray-300'
+                      }`}
+                    >
+                      {tag.name}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    return (
+      <div className="flex flex-col gap-8">
+        {/* Render original version and first child horizontally */}
+        <div className="flex gap-20 items-start">
+          {renderVersionNode(originalVersion)}
+          {childrenMap.get(originalVersion.id)?.length > 0 && (
+            <div className="flex items-start relative">
+              <div className="absolute -top-8 left-0 text-xs text-red-500 bg-white px-1">V6</div>
+              {renderVersionNode(childrenMap.get(originalVersion.id)![0])}
+            </div>
+          )}
+        </div>
+        
+        {/* Render remaining children vertically aligned below first child */}
+        {childrenMap.get(originalVersion.id)?.slice(1).map((child, index) => (
+          <div key={child.id} className="flex items-start relative" style={{ marginLeft: '280px' }}>
+            <div className="absolute -top-8 left-0 text-xs text-blue-500 bg-white px-1">V7</div>
+            {renderVersionNode(child)}
+          </div>
+        ))}
+        
+        {/* Render root versions (siblings) on separate lines */}
+        {rootVersions.map(version => (
+          <div key={version.id} className="flex gap-20 items-start ml-20">
+            {renderVersionNode(version)}
+          </div>
+        ))}
+        
+        {/* Instructions */}
+        <div className="text-gray-400 text-xs text-center mt-4">
+          💡 Drag a version over another to create a branch (parent-child relationship)
+        </div>
+      </div>
+    );
+  };
+
   if (!isOpen || !media) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-gray-800 rounded-lg p-6 max-w-4xl max-h-[90vh] overflow-y-auto w-full mx-4">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-gray-800 rounded-lg p-6 max-w-6xl w-full mx-auto">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold text-white">
-            Media Versions - {media.baseFilename?.replace(/_[a-f0-9]{4}$/, '') || 'Unknown'}
-          </h2>
+          <div>
+            <h2 className="text-xl font-bold text-white">Media Versions</h2>
+            <FilenameEditor
+              filename={media.baseFilename?.replace(/_[a-f0-9]{4}$/, '') || 'Unknown'}
+              onSave={handleFilenameUpdate}
+            />
+          </div>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-white text-2xl font-bold"
@@ -175,266 +412,29 @@ const MediaVersionModal: React.FC<MediaVersionModalProps> = ({
           </button>
         </div>
 
-        {loading ? (
-          <div className="text-center py-8 text-gray-400">
-            Loading versions...
-          </div>
-        ) : versions.length === 0 ? (
-          <div className="text-center py-8 text-gray-400">
-            No versions found
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {/* Version Flow */}
-            <div className="flex items-center space-x-4 overflow-x-auto pb-4">
-              {versions.map((version, index) => (
-                <React.Fragment key={version.id}>
-                  {/* Version Card */}
-                  <div className="flex-shrink-0 group">
-                    <div className="bg-gray-700 rounded-lg p-3" style={{ width: '256px' }}>
-
-                      {/* Thumbnail */}
-                      <div className="bg-gray-600 rounded-lg mb-3 overflow-hidden relative" style={{ height: '180px' }}>
-                        {/* Delete button overlaying the thumbnail - Only for non-original versions */}
-                        {!version.enhancementTags?.some(tag => tag.name === 'original') && (
-                          <div
-                            className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-                            style={{
-                              width: '32px',
-                              height: '32px',
-                              zIndex: 10,
-                              backgroundColor: '#dc2626 !important',
-                              backgroundImage: 'none !important',
-                              background: '#dc2626 !important',
-                              borderRadius: '4px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              color: 'white',
-                              fontSize: '16px',
-                              fontWeight: 'bold',
-                              cursor: 'pointer',
-                              transition: 'all 0.2s',
-                              border: '2px solid #dc2626',
-                              marginRight: '10px'
-                            }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteVersion(version.id);
-                            }}
-                            title="Delete version"
-                          >
-                            <span style={{
-                              display: 'block',
-                              textAlign: 'center',
-                              lineHeight: '1',
-                              margin: '0',
-                              padding: '0'
-                            }}>🗑️</span>
-                          </div>
-                        )}
-                        {version.thumbnailPath ? (
-                          <img
-                            src={`http://localhost:8000/${version.thumbnailPath}`}
-                            alt={`Version ${index + 1}`}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-gray-500">
-                            📁
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Version Info */}
-                      <div className="text-center">
-                        {/* Enhancement Tags */}
-                        <div className="flex flex-wrap gap-1 justify-center mb-2">
-                          {version.enhancementTags && version.enhancementTags.length > 0 &&
-                            version.enhancementTags.map((tag: any) => {
-                              const validTag = enhancementTags.find(t => t.id === tag.id);
-                              // Check if this is an invalid tag with notes
-                              const isInvalidTag = tag.name === 'invalid' && tag.notes;
-                              // Get display name and validity
-                              const displayName = isInvalidTag ? `invalid - ${tag.notes}` : tag.name;
-                              const isValid = validTag && tag.name !== 'invalid';
-                              const tagColor = isValid ? tag.color : '#dc2626';
-                              return (
-                                <span
-                                  key={tag.id}
-                                  className="text-[10px] px-2 py-0.5 rounded-md font-medium border"
-                                  style={{
-                                    backgroundColor: 'transparent',
-                                    color: tagColor + ' !important',
-                                    borderColor: tagColor
-                                  }}
-                                  title={isInvalidTag
-                                    ? `Invalid tag: ${tag.notes || tag.name}`
-                                    : tag.description || tag.name
-                                  }
-                                >
-                                  {displayName}
-                                  {isInvalidTag && (
-                                    <span className="ml-1 text-xs">⚠️</span>
-                                  )}
-                                </span>
-                              );
-                            })}
-                        </div>
-
-                        {/* Edit Tags Button */}
-                        <button
-                          className="text-xs px-2 py-1 bg-gray-600 hover:bg-gray-700 text-white rounded transition-colors"
-                          onClick={() => handleEditTags(version)}
-                        >
-                          ✏️ Edit Tags
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Arrow */}
-                  {index < versions.length - 1 && (
-                    <div className="flex-shrink-0 text-gray-400 text-2xl">
-                      →
-                    </div>
-                  )}
-                </React.Fragment>
-              ))}
+        <div>
+          {loading ? (
+            <div className="flex items-center justify-center h-full text-gray-400">
+              Loading versions...
             </div>
-
-            {/* Sort Controls */}
-            {versions.length > 1 && (
-              <div className="flex items-center justify-center space-x-4 pt-4 border-t border-gray-600">
-                <button
-                  className="px-3 py-1 bg-gray-600 hover:bg-gray-700 text-white text-xs rounded-md transition-colors"
-                  onClick={() => {
-                    const original = versions[0];
-                    const others = [...versions.slice(1)].sort((a, b) =>
-                      new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime()
-                    );
-                    setVersions([original, ...others]);
-                  }}
-                >
-                  Date (Newest)
-                </button>
-                <button
-                  className="px-3 py-1 bg-gray-600 hover:bg-gray-700 text-white text-xs rounded-md transition-colors"
-                  onClick={() => {
-                    const original = versions[0];
-                    const others = [...versions.slice(1)].sort((a, b) => {
-                      const aTags = a.enhancementTags?.map(t => t.name).join('') || '';
-                      const bTags = b.enhancementTags?.map(t => t.name).join('') || '';
-                      return aTags.localeCompare(bTags);
-                    });
-                    setVersions([original, ...others]);
-                  }}
-                >
-                  By Tag
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Tag Selection Popup */}
-      {showTagSelection && selectedVersion && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-60">
-          <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-bold text-white mb-4">
-              Edit Tags for Version {selectedVersion.id}
-            </h3>
-            <p className="text-gray-300 text-sm mb-4">
-              Select the enhancement tags you want to apply to this version:
-            </p>
-
-            {/* Current Tags Summary */}
-            <div className="mb-4 p-2 bg-gray-700 rounded">
-              <div className="text-xs text-gray-400 mb-1">Current tags:</div>
-              <div className="flex flex-wrap gap-1">
-                {selectedVersion.enhancementTags?.map(tag => (
-                  <span
-                    key={tag.id}
-                    className="text-[10px] px-2 py-0.5 rounded-md font-medium border"
-                    style={{
-                      backgroundColor: 'transparent',
-                      color: tag.color + ' !important',
-                      borderColor: tag.color
-                    }}
-                  >
-                    {tag.name === 'invalid' && tag.notes ? `invalid - ${tag.notes}` : tag.name}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            {/* Tag Selection List */}
-            <div className="space-y-2 max-h-60 overflow-y-auto">
-              {availableTags.map(tag => {
-                const isSelected = selectedTags.some(t => t.id === tag.id);
-                const isLocked = tag.id === 2 && isSelected; // Original tag is ID 2
-                return (
-                  <label
-                    key={tag.id}
-                    className={`flex items-center justify-between p-2 rounded-md transition-colors ${isLocked
-                      ? 'bg-gray-800 cursor-not-allowed opacity-75'
-                      : 'bg-gray-700 hover:bg-gray-600 cursor-pointer'
-                      }`}
-                  >
-                    <div className="flex items-center flex-1">
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => handleTagToggle(tag)}
-                        className="mr-3 h-4 w-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
-                        disabled={loading || isLocked}
-                      />
-                      <span className={`${isLocked ? 'text-gray-400' : 'text-white'}`}>
-                        {tag.name}
-                        {isLocked && (
-                          <span className="ml-2 text-xs text-gray-500">🔒 Protected</span>
-                        )}
-                      </span>
-                    </div>
-                    <span
-                      className="w-4 h-4 rounded-full border-2 flex-shrink-0"
-                      style={{
-                        backgroundColor: tag.color,
-                        borderColor: tag.color,
-                        opacity: isLocked ? 0.5 : 1
-                      }}
-                    />
-                  </label>
-                );
-              })}
-            </div>
-
-            {/* Action Buttons */}
-            <div className="mt-4 flex justify-between">
-              <button
-                className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-md transition-colors"
-                onClick={() => {
-                  setShowTagSelection(false);
-                  setSelectedVersion(null);
-                  setSelectedTags([]);
-                  setAvailableTags([]);
+          ) : (
+            <div className="p-4">
+              <MediaVersionTree
+                media={media}
+                versions={versions}
+                enhancementTags={enhancementTags}
+                onVersionDeleted={() => {
+                  loadVersions();
+                  if (onVersionDeleted) onVersionDeleted();
                 }}
-                disabled={loading}
-              >
-                Cancel
-              </button>
-              <button
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors"
-                onClick={handleSaveTags}
-                disabled={loading}
-              >
-                {loading ? 'Saving...' : 'Save Tags'}
-              </button>
+              />
+              <div className="text-gray-400 text-xs text-center mt-4">
+                💡 Drag a version over another to create a branch (parent-child relationship)
+              </div>
             </div>
-          </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 };

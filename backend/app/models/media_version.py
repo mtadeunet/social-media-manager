@@ -9,6 +9,8 @@ class MediaVersion(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     media_vault_id = Column(Integer, ForeignKey("media_vault.id"), nullable=False)
+    parent_version_id = Column(Integer, ForeignKey("media_versions.id"), nullable=True)
+    sequence_order = Column(Integer, default=0)  # For ordering versions
     filename = Column(String, nullable=False)  # {original}_{hash4}.jpg
     file_path = Column(String, nullable=False)
     thumbnail_path = Column(String, nullable=True)
@@ -18,6 +20,8 @@ class MediaVersion(Base):
     
     # Relationships
     media_vault = relationship("MediaVault", back_populates="versions")
+    parent_version = relationship("MediaVersion", remote_side="MediaVersion.id")
+    child_versions = relationship("MediaVersion", remote_side="MediaVersion.parent_version_id")
     enhancement_tags = relationship("EnhancementTag", secondary="version_enhancement_tags", back_populates="versions")
     
     def __repr__(self):

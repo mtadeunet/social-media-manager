@@ -74,7 +74,8 @@ export const mediaVaultService = {
 
   async getMediaVersions(mediaId: number): Promise<{ versions: any[] }> {
     const response = await api.get(`/media-vault/${mediaId}`);
-    return response.data;
+    // The response contains a media item with versions array
+    return { versions: response.data.versions || [] };
   },
 
   async updateVersionTags(
@@ -84,7 +85,7 @@ export const mediaVaultService = {
       tagsToRemove?: number[];
       invalidTagsToRemove?: string[];
     }
-  ): Promise<{ message: string }> {
+  ): Promise<void> {
     const payload: any = {};
 
     if (options.tagsToAdd) {
@@ -97,7 +98,33 @@ export const mediaVaultService = {
       payload.invalid_tags_to_remove = options.invalidTagsToRemove;
     }
 
-    const response = await api.put(`/media-vault/${versionId}/tags`, payload);
+    await api.put(`/media-vault/versions/${versionId}/tags`, payload);
+  },
+
+  async moveVersion(
+    mediaId: number,
+    versionId: number,
+    newParentId?: number
+  ): Promise<void> {
+    const payload = newParentId !== undefined ? { new_parent_id: newParentId } : {};
+    console.log('moveVersion API call:', {
+      url: `/media-vault/${mediaId}/versions/${versionId}/move`,
+      payload: JSON.stringify(payload),
+      newParentId,
+      typeofNewParentId: typeof newParentId
+    });
+    await api.put(`/media-vault/${mediaId}/versions/${versionId}/move`, payload);
+  },
+
+  async reorderVersions(mediaId: number, versionIds: number[]): Promise<void> {
+    await api.put(`/media-vault/${mediaId}/versions/reorder`, versionIds);
+  },
+
+  async updateFilename(
+    mediaId: number,
+    newBaseFilename: string
+  ): Promise<{ message: string; old_filename: string; new_filename: string }> {
+    const response = await api.put(`/media-vault/${mediaId}/filename`, { new_base_filename: newBaseFilename });
     return response.data;
   },
 

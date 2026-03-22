@@ -31,6 +31,8 @@ class MediaVersionResponse(BaseSchema):
     """Media version response model"""
     id: int
     media_vault_id: int
+    parent_version_id: Optional[int] = None
+    sequence_order: Optional[int] = 0
     filename: str
     file_path: str
     thumbnail_path: Optional[str] = None
