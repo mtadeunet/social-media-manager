@@ -5,6 +5,7 @@ interface TagDropdownProps {
   availableTags: EnhancementTag[];
   selectedTags: EnhancementTag[];
   onTagsChange: (tags: EnhancementTag[]) => void;
+  onClose?: () => void;
   position?: { top: number; left: number };
 }
 
@@ -12,6 +13,7 @@ const TagDropdown: React.FC<TagDropdownProps> = ({
   availableTags,
   selectedTags,
   onTagsChange,
+  onClose,
   position
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -60,15 +62,29 @@ const TagDropdown: React.FC<TagDropdownProps> = ({
   return (
     <div ref={dropdownRef} style={style}>
       <div className="w-full bg-gray-800 border border-gray-600 rounded-lg shadow-lg max-h-60 overflow-hidden">
-        <div className="p-2 border-b border-gray-600">
+        <div className="p-2 border-b border-gray-600 flex items-center gap-2">
           <input
             type="text"
             placeholder="Search tags..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-gray-700 text-white px-2 py-1 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="flex-1 bg-gray-700 text-white px-2 py-1 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             autoFocus
           />
+          <button
+            onClick={() => {
+              setSearchTerm('');
+              if (onClose) {
+                onClose();
+              }
+            }}
+            className="text-gray-400 hover:text-white transition-colors p-1"
+            title="Close"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
         <div className="max-h-48 overflow-y-auto">
           {filteredTags.length === 0 ? (

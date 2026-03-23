@@ -320,6 +320,10 @@ const MediaVersionTree: React.FC<MediaVersionTreeProps> = ({
           availableTags={enhancementTags}
           selectedTags={versions.find(v => v.id === editingVersion)?.enhancementTags || []}
           onTagsChange={(newTags) => handleTagSelectionChange(editingVersion, newTags)}
+          onClose={() => {
+            setTagDropdownPosition(null);
+            setEditingVersion(null);
+          }}
           position={tagDropdownPosition}
         />
       )}
