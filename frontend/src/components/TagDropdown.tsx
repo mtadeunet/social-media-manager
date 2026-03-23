@@ -35,8 +35,8 @@ const TagDropdown: React.FC<TagDropdownProps> = ({
   );
 
   const handleToggle = (tag: EnhancementTag) => {
-    // Don't allow removing original tag
-    if (tag.name === 'original' && selectedTags.some(t => t.id === tag.id)) {
+    // Don't allow toggling original or invalid tags
+    if (tag.name === 'original' || tag.name === 'invalid') {
       return;
     }
 
@@ -92,7 +92,7 @@ const TagDropdown: React.FC<TagDropdownProps> = ({
           ) : (
             filteredTags.map(tag => {
               const isSelected = selectedTags.some(t => t.id === tag.id);
-              const isLocked = tag.name === 'original' && isSelected;
+              const isLocked = tag.name === 'original' || tag.name === 'invalid';
 
               return (
                 <div
