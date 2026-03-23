@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { mediaVaultService } from '../services/mediaVaultService';
 import { EnhancementTag, MediaVault, MediaVersion } from '../types/mediaVault';
+import TagDropdown from './TagDropdown';
 
 interface MediaVersionTreeProps {
   media: MediaVault;
@@ -16,6 +17,8 @@ const MediaVersionTree: React.FC<MediaVersionTreeProps> = ({
   onVersionDeleted
 }) => {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [editingVersion, setEditingVersion] = useState<number | null>(null);
+  const [tagDropdownPosition, setTagDropdownPosition] = useState<{ top: number; left: number } | null>(null);
 
   // Build grid positions
   const buildGrid = () => {
@@ -56,6 +59,48 @@ const MediaVersionTree: React.FC<MediaVersionTreeProps> = ({
   };
 
   const { grid } = buildGrid();
+
+  // Handle tag click to open dropdown
+  const handleTagClick = (versionId: number, event: React.MouseEvent) => {
+    const rect = (event.target as HTMLElement).getBoundingClientRect();
+    
+    setEditingVersion(versionId);
+    setTagDropdownPosition({
+      top: rect.bottom,
+      left: rect.left
+    });
+  };
+
+  // Handle tag selection change
+  const handleTagSelectionChange = async (versionId: number, newTags: EnhancementTag[]) => {
+    const version = versions.find(v => v.id === versionId);
+    if (!version) return;
+
+    try {
+      const currentTagIds = version.enhancementTags?.map(t => t.id) || [];
+      const newTagIds = newTags.map(t => t.id);
+
+      const tagsToAdd = newTagIds.filter(id => !currentTagIds.includes(id));
+      const tagsToRemove = currentTagIds.filter(id => !newTagIds.includes(id) && id !== 2); // Don't remove original tag
+
+      const invalidTagsToRemove = version.enhancementTags?.filter(t => 
+        t.name === 'invalid' && t.notes && !newTagIds.includes(t.id)
+      ).map(t => t.notes || '') || [];
+
+      await mediaVaultService.updateVersionTags(versionId, {
+        tagsToAdd,
+        tagsToRemove,
+        invalidTagsToRemove
+      });
+
+      setEditingVersion(null);
+      setTagDropdownPosition(null);
+      if (onVersionDeleted) onVersionDeleted();
+    } catch (error) {
+      console.error('Failed to update tags:', error);
+      alert('Failed to update tags. Please try again.');
+    }
+  };
 
   // Calculate grid dimensions
   let maxX = 0, maxY = 0;
@@ -153,7 +198,7 @@ const MediaVersionTree: React.FC<MediaVersionTreeProps> = ({
 
         {/* Tag pills */}
         <div className="text-center">
-          {version.enhancementTags && version.enhancementTags.length > 0 && (
+          {version.enhancementTags && version.enhancementTags.length > 0 ? (
             <div className="flex flex-wrap gap-1 justify-center">
               {version.enhancementTags.map(tag => {
                 const validTag = enhancementTags.find(t => t.id === tag.id);
@@ -171,6 +216,7 @@ const MediaVersionTree: React.FC<MediaVersionTreeProps> = ({
                       color: tagColor + ' !important',
                       borderColor: tagColor
                     }}
+                    onClick={(e) => handleTagClick(version.id, e)}
                     title={isInvalidTag
                       ? `Invalid tag: ${tag.notes || tag.name}`
                       : tag.description || tag.name
@@ -183,6 +229,21 @@ const MediaVersionTree: React.FC<MediaVersionTreeProps> = ({
                   </span>
                 );
               })}
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-1 justify-center">
+              <span
+                className="text-[10px] px-2 py-0.5 rounded-md font-medium border cursor-pointer hover:opacity-80 transition-opacity"
+                style={{
+                  backgroundColor: 'transparent',
+                  color: '#dc2626',
+                  borderColor: '#dc2626'
+                }}
+                onClick={(e) => handleTagClick(version.id, e)}
+                title="Click to add tags"
+              >
+                no tags
+              </span>
             </div>
           )}
         </div>
@@ -224,7 +285,7 @@ const MediaVersionTree: React.FC<MediaVersionTreeProps> = ({
   }
 
   return (
-    <>
+    <div className="relative">
       <div 
         className="bg-gray-900 rounded p-4"
         style={{
@@ -240,25 +301,29 @@ const MediaVersionTree: React.FC<MediaVersionTreeProps> = ({
 
       {/* Full image modal */}
       {selectedImage && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 cursor-pointer"
+        <div
+          className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50"
           onClick={() => setSelectedImage(null)}
         >
-          <img 
-            src={selectedImage} 
-            alt="Full size version" 
-            className="max-w-full max-h-full object-contain"
+          <img
+            src={selectedImage}
+            alt="Full size version"
+            className="max-w-[90vw] max-h-[90vh] object-contain"
             onClick={(e) => e.stopPropagation()}
           />
-          <button
-            className="absolute top-4 right-4 text-white text-2xl font-bold hover:text-gray-300"
-            onClick={() => setSelectedImage(null)}
-          >
-            ×
-          </button>
         </div>
       )}
-    </>
+
+      {/* Tag dropdown */}
+      {tagDropdownPosition && editingVersion && (
+        <TagDropdown
+          availableTags={enhancementTags}
+          selectedTags={versions.find(v => v.id === editingVersion)?.enhancementTags || []}
+          onTagsChange={(newTags) => handleTagSelectionChange(editingVersion, newTags)}
+          position={tagDropdownPosition}
+        />
+      )}
+    </div>
   );
 };
 

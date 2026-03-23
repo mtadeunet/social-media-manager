@@ -98,7 +98,7 @@ export const mediaVaultService = {
       payload.invalid_tags_to_remove = options.invalidTagsToRemove;
     }
 
-    await api.put(`/media-vault/versions/${versionId}/tags`, payload);
+    await api.put(`/media-vault/${versionId}/tags`, payload);
   },
 
   async moveVersion(
