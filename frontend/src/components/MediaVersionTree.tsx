@@ -231,7 +231,8 @@ const MediaVersionTree: React.FC<MediaVersionTreeProps> = ({
           display: 'grid',
           gridTemplateColumns: `repeat(${maxX + 1}, 240px)`,
           gridTemplateRows: `repeat(${maxY + 1}, 280px)`,
-          gap: '20px'
+          columnGap: '80px',
+          rowGap: '20px'
         }}
       >
         {renderGrid()}
