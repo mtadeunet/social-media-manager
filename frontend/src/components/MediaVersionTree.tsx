@@ -64,6 +64,13 @@ const MediaVersionTree: React.FC<MediaVersionTreeProps> = ({
   const handleTagClick = (versionId: number, event: React.MouseEvent) => {
     const rect = (event.target as HTMLElement).getBoundingClientRect();
     
+    // If clicking on the same version that's already open, close it
+    if (editingVersion === versionId && tagDropdownPosition) {
+      setTagDropdownPosition(null);
+      setEditingVersion(null);
+      return;
+    }
+    
     setEditingVersion(versionId);
     setTagDropdownPosition({
       top: rect.bottom,
